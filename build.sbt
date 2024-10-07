@@ -16,6 +16,8 @@ lazy val core = project
   .settings(
     scalacOptions += "-Ymacro-debug-lite",
     scalacOptions += "-Ymacro-annotations",
+    libraryDependencies += "org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0",
+    libraryDependencies += "dev.zio" %% "zio-bson" % "1.0.7",
     libraryDependencies += munit % Test
   )
   .dependsOn(macros)

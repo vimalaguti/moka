@@ -21,6 +21,13 @@ object Moka {
   object mokaMacro {
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
       import c.universe._
+      val rm = scala.reflect.runtime.currentMirror
+
+      def extractCompanionObjectParts(cobject: ModuleDef) =
+        cobject match {
+          case q"$mods object $tname extends { ..$earlydefns } with ..$parents { $self => ..$stats }" =>
+            (mods, tname, earlydefns, parents, self, stats)
+        }
 
       def extractCaseClassParts(
           classDecl: ClassDef
@@ -38,10 +45,17 @@ object Moka {
 
       def generateFieldNames(terms: List[ValDef]) = {
         terms.map {
-          case t @ q"$mods val $name: $tpt = $rhs" =>
+          case q"$mods val $name: $tpt = $rhs" =>
+            val annotationName = mods.annotations.collect{
+              case Apply(Select((New(Ident(TypeName("BsonProperty"))), _)), Literal(Constant(annName: String)) :: Nil) => Some(annName)
+              case Apply(Select((New(Ident(TypeName("bsonField"))), _)), Literal(Constant(annName: String)) :: Nil) => Some(annName)
+              case _ => None
+            }.flatten.headOption 
+            
             val termName = TermName(name.decodedName.toString())
-            val value = q"${name.decodedName.toString()}"
-            val tpe = tq"${name.decodedName.toString()}"
+            val bsonName = annotationName.getOrElse(name.decodedName.toString())
+            val value = q"${bsonName}"
+            val tpe = tq"${bsonName}"
 
             val definition = ValDef(Modifiers(), termName, tpe, value)
 
@@ -70,6 +84,27 @@ object Moka {
             }
             """
           println("COMPANION: " + companion)
+          c.Expr[Any](companion)
+
+        case (classDecl: ClassDef) :: (singleton: ModuleDef) :: Nil =>
+          // extract case class and companion object
+          val (className, fields) = extractCaseClassParts(classDecl)
+          val (mods, tname, earlydefns, parents, self, stats) = extractCompanionObjectParts(singleton)
+
+          // generate the names
+          val generatedTerms = generateFieldNames(fields.head)
+
+          // generate Fields object
+          val objectFields = q"object Fields { ..$generatedTerms }"
+
+          val companion =
+            q"""
+            $classDecl // original class
+            $mods object ${tname.toTermName} extends { ..$earlydefns } with ..$parents { $self =>
+              $objectFields
+              ..$stats
+            }
+            """
           c.Expr[Any](companion)
         case _ => c.abort(c.enclosingPosition, "Invalid annottee")
       }
