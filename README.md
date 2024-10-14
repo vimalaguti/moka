@@ -4,7 +4,7 @@ The generated `Fields` object contains he name of the defined case class fields.
 
 ## Example 
 
-```
+```scala
 @moka
 case class Apple(color: String)
 
