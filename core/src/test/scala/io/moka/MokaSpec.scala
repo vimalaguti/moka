@@ -1,7 +1,7 @@
 package io.moka
 
 import Moka.moka
-import io.moka.TestDefinitions._
+import TestDefinitions._
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
 
@@ -33,6 +33,10 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(WithCompanionObject.b, 3)
     assertEquals(WithCompanionObject.someFunction(3), WithCompanionObject(3))
     assertEquals(WithCompanionObject.Fields.a, "a")
+  }
+
+  test("supports defining a different name") {
+    assertEquals(RenamedObject.Renamed.a, "a")
   }
 
   test("supports bson annotations") {
@@ -78,6 +82,8 @@ object TestDefinitions {
     val b = 3
     def someFunction(a: Int): WithCompanionObject = WithCompanionObject(a)
   }
+  @moka("Renamed")
+  case class RenamedObject(a: Int)
   @moka
   final case class BsonAnnotatedClass(@BsonProperty("b") a: Int)
   @moka

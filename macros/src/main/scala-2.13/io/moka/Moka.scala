@@ -4,24 +4,25 @@ import scala.annotation.{StaticAnnotation, compileTimeOnly}
 import scala.language.experimental.macros
 import scala.reflect.macros.whitebox
 
-trait Moka[T] {
-
-  // def generateFields
-
-  // val Fields
-}
 
 object Moka {
 
   @compileTimeOnly("enable macro paradise to expand macro annotations")
-  class moka extends StaticAnnotation {
+  class moka(name: String = "Fields") extends StaticAnnotation {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
   }
 
   object mokaMacro {
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
       import c.universe._
-      val rm = scala.reflect.runtime.currentMirror
+
+      def extractObjectDestinationName: TermName = 
+        c.prefix.tree match {
+          case Apply(_, Literal(Constant(name: String)) :: Nil) => TermName(name)
+          case Apply(_, Nil) => TermName("Fields")
+          case _ => 
+            c.abort(c.enclosingPosition, "Invalid annotation arguments")
+        }
 
       def extractCompanionObjectParts(cobject: ModuleDef) =
         cobject match {
@@ -59,7 +60,6 @@ object Moka {
 
             val definition = ValDef(Modifiers(), termName, tpe, value)
 
-            println(s"TERM DEFINITION $name:" + definition)
             definition
           case term =>
             c.abort(c.enclosingPosition, "Invalid field: " + term.name)
@@ -74,7 +74,8 @@ object Moka {
           val generatedTerms = generateFieldNames(fields.head)
 
           // generate Fields object
-          val objectFields = q"object Fields { ..$generatedTerms }"
+          val objectName = extractObjectDestinationName
+          val objectFields = q"object $objectName { ..$generatedTerms }"
 
           val companion =
             q"""
@@ -83,7 +84,6 @@ object Moka {
               $objectFields
             }
             """
-          println("COMPANION: " + companion)
           c.Expr[Any](companion)
 
         case (classDecl: ClassDef) :: (singleton: ModuleDef) :: Nil =>
@@ -95,6 +95,7 @@ object Moka {
           val generatedTerms = generateFieldNames(fields.head)
 
           // generate Fields object
+          val objectName = extractObjectDestinationName
           val objectFields = q"object Fields { ..$generatedTerms }"
 
           val companion =
