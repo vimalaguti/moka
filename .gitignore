@@ -9,3 +9,12 @@ target/
 
 # editors
 .vscode
+
+# doc
+website/build/
+website/node_modules/
+website/.docusaurus
+yarn.lock
+package-lock.json
+website/variables.js
+website/static/api
