@@ -69,6 +69,9 @@ object TestDefinitions {
   final case class NoFields()
   @moka
   final case class OneField(a: Int)
+  object OneField {
+    Moka.generateFields[Orange]
+  }
   @moka
   final case class ManyFields(a: Int, b: Int)
   @moka
