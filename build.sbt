@@ -1,46 +1,67 @@
-import Dependencies._
+lazy val scala213Version        = "2.13.16"
+lazy val scala3LtsVersion          = "3.3.5"
+lazy val scala3LastVersion          = "3.6.4"
+lazy val supportedScalaVersions = List(scala213Version, scala3LastVersion)
+lazy val updatedScalaVersions = List(scala213Version, scala3LastVersion)
 
-ThisBuild / scalaVersion     := "2.13.15"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "io.moka"
 ThisBuild / organizationName := "moka"
+ThisBuild / scalaVersion     := scala3LastVersion
+
+lazy val scalacOptionsCommon = Seq(
+  Compile / scalacOptions ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, 13)) => List("-Ymacro-annotations", "Xsource:3")
+      case _             => Nil
+    }
+  }
+)
 
 lazy val root = project
   .settings(
-    publishArtifact := false,
-    addCommandAlias("run", "core/run")
+    crossScalaVersions := Nil,
+    publish / skip     := true,
+    addCommandAlias("run", "examples/run")
   )
-  .aggregate(core, macros)
+  .aggregate(examples, macros)
 
-lazy val core = project
+lazy val examples = project
+  .settings(scalacOptionsCommon)
   .settings(
-  //   scalacOptions += "-Ymacro-debug-lite",
-    scalacOptions += "-Ymacro-annotations",
-    libraryDependencies += "org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0",
-    libraryDependencies += "dev.zio"           %% "zio-bson"         % "1.0.7",
-    libraryDependencies += munit                % Test
+    crossScalaVersions := supportedScalaVersions,
+    //   scalacOptions += "-Ymacro-debug-lite",
+    libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0")
+      .cross(CrossVersion.for3Use2_13),
+    libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.7",
+    libraryDependencies += "org.scalameta" %% "munit"    % "1.0.2" % Test
   )
   .dependsOn(macros)
 
 lazy val docs = project
   .in(file("moka-docs"))
   .settings(
-    scalacOptions += "-Ymacro-annotations",
-    mdocVariables := Map(
-      "VERSION" -> version.value
-    ),
-    moduleName := "moka-docs",
+    crossScalaVersions := supportedScalaVersions,
+    moduleName     := "moka-docs",
     git.remoteRepo := "git@github.com:vimalaguti/moka.git"
   )
-  .dependsOn(core)
+  .dependsOn(examples)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, GhpagesPlugin)
 
 lazy val macros = project
+  .settings(scalacOptionsCommon)
   .settings(
-    name := "Moka",
-    scalacOptions += "-Ymacro-annotations",
-    libraryDependencies += scalaMacros
-    // libraryDependencies += munit % Test
+    crossScalaVersions := supportedScalaVersions,
+    name := "moka",
+    libraryDependencies ++= {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 13)) =>
+          Seq(
+            "org.scala-lang" % "scala-reflect" % scalaVersion.value
+          )
+        case _ => Seq.empty
+      }
+    }
   )
 
 // See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html for instructions on how to publish to Sonatype.
