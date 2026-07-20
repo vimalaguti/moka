@@ -52,6 +52,39 @@ No `-experimental` needed for this path.
 - Remove `-Xprint:postInlining` debug flag from build.sbt.
 - Keep the (unused) `MacroAnnotation` code for reference; delete later.
 
+## Update (same day): A2 — fully shared definitions
+
+Milestone 1-3 delivered, then extended so `Definitions.scala` itself
+cross-compiles. Shared style combines both mechanisms:
+
+```scala
+@moka
+final case class ManyFields(a: Int, b: Int)
+object ManyFields {
+  val Fields = Moka.generateFields[ManyFields]
+}
+```
+
+- **Scala 3**: `@moka` is a no-op `StaticAnnotation` (the experimental
+  `MacroAnnotation` was removed; `-experimental` dropped from the build).
+  `generateFields` does the work at typer time.
+- **Scala 2**: the `@moka` macro annotation rewrites the companion, replacing
+  any stat matching `val X = Moka.generateFields[T]` with the generated
+  `object X { ... }` (the val is the marker — no collision with an existing
+  destination). Without a placeholder val, legacy behavior is kept, now
+  honoring the custom-name argument in the companion branch too.
+
+Three source tiers, mirrored in tests:
+
+- `src/{main,test}/scala` — cross-compiled: shared `Definitions` + `MokaSpec`
+  (12 tests) prove the same source works on 2.13 and 3.
+- `src/{main,test}/scala-2` — `Scala2Definitions`/`Scala2MokaSpec`:
+  `@moka` generating a missing companion (incl. custom name) — Scala 2 only.
+- `src/{main,test}/scala-3` — `Scala3Definitions`/`Scala3MokaSpec`:
+  `generateFields` without the annotation.
+
+Also fixed: `"Xsource:3"` scalac flag was missing its dash.
+
 ## Verification
 
 `bloop test examples` for the inner loop; final check with

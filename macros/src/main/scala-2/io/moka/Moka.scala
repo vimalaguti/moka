@@ -68,6 +68,12 @@ object Moka {
         }
       }
 
+      def isGenerateFieldsCall(rhs: Tree): Boolean = rhs match {
+        case q"$_.generateFields[$_]" => true
+        case q"generateFields[$_]"    => true
+        case _                        => false
+      }
+
       annottees.map(_.tree).toList match {
         case (classDecl: ClassDef) :: Nil =>
           val (className, fields) = extractCaseClassParts(classDecl)
@@ -95,17 +101,27 @@ object Moka {
 
           // generate the names
           val generatedTerms = generateFieldNames(fields.head)
-
-          // generate Fields object
           val objectName = extractObjectDestinationName
-          val objectFields = q"object Fields { ..$generatedTerms }"
+
+          // replace placeholder vals (val X = Moka.generateFields[T]) with the
+          // generated object, so cross-compiled sources can share definitions
+          // with the Scala 3 inline macro
+          var replacedPlaceholder = false
+          val updatedStats = stats.map {
+            case q"$_ val $name: $_ = $rhs" if isGenerateFieldsCall(rhs) =>
+              replacedPlaceholder = true
+              q"object $name { ..$generatedTerms }"
+            case other => other
+          }
+          val newStats =
+            if (replacedPlaceholder) updatedStats
+            else q"object $objectName { ..$generatedTerms }" +: stats
 
           val companion =
             q"""
             $classDecl // original class
             $mods object ${tname.toTermName} extends { ..$earlydefns } with ..$parents { $self =>
-              $objectFields
-              ..$stats
+              ..$newStats
             }
             """
           c.Expr[Any](companion)

@@ -12,8 +12,8 @@ ThisBuild / scalaVersion     := scala3LastVersion
 lazy val scalacOptionsCommon = Seq(
   Compile / scalacOptions ++= {
     CrossVersion.partialVersion(scalaVersion.value) match {
-      case Some((2, 13)) => List("-Ymacro-annotations", "Xsource:3")
-      case Some((3, _))  => List("-experimental", "-Xprint:postInlining")
+      case Some((2, 13)) => List("-Ymacro-annotations", "-Xsource:3")
+      case Some((3, _))  => List("-Xprint:postInlining")
       case _             => Nil
     }
   }
