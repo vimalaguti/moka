@@ -1,13 +1,11 @@
 lazy val scala213Version        = "2.13.16"
-lazy val scala3LtsVersion          = "3.3.5"
-lazy val scala3LastVersion          = "3.6.4"
-lazy val supportedScalaVersions = List(scala213Version, scala3LastVersion)
-lazy val updatedScalaVersions = List(scala213Version, scala3LastVersion)
+lazy val scala3LtsVersion       = "3.3.5"
+lazy val supportedScalaVersions = List(scala213Version, scala3LtsVersion)
 
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "io.moka"
 ThisBuild / organizationName := "moka"
-ThisBuild / scalaVersion     := scala3LastVersion
+ThisBuild / scalaVersion     := scala3LtsVersion
 
 lazy val scalacOptionsCommon = Seq(
   Compile / scalacOptions ++= {
@@ -36,7 +34,8 @@ lazy val examples = project
     //   scalacOptions += "-Ymacro-debug-lite",
     libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0")
       .cross(CrossVersion.for3Use2_13),
-    libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.7",
+    // 1.0.7 is built on Scala 3.4 and cannot be consumed from the 3.3 LTS compiler
+    libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
     libraryDependencies += "org.scalameta" %% "munit"    % "1.0.2" % Test
   )
   .dependsOn(macros)
