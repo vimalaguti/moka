@@ -27,4 +27,9 @@ class Scala3MokaSpec extends munit.FunSuite {
   test("nested case class uses the outer field name") {
     assertEquals(Nested.Fields.inner, "inner")
   }
+
+  test("generateFields on a non-case class is a compile error") {
+    val errors = compileErrors("Moka.generateFields[String]")
+    assert(errors.contains("requires a case class"), errors)
+  }
 }
