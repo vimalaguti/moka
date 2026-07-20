@@ -47,6 +47,7 @@ lazy val docs = project
     crossScalaVersions := supportedScalaVersions,
     publish / skip := true,
     moduleName     := "moka-docs",
+    mdocVariables  := Map("VERSION" -> version.value),
     git.remoteRepo := "git@github.com:vimalaguti/moka.git"
   )
   .dependsOn(examples)
