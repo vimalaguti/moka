@@ -31,6 +31,7 @@ lazy val examples = project
   .settings(scalacOptionsCommon)
   .settings(
     crossScalaVersions := supportedScalaVersions,
+    publish / skip     := true,
     //   scalacOptions += "-Ymacro-debug-lite",
     libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0")
       .cross(CrossVersion.for3Use2_13),
@@ -44,6 +45,7 @@ lazy val docs = project
   .in(file("moka-docs"))
   .settings(
     crossScalaVersions := supportedScalaVersions,
+    publish / skip := true,
     moduleName     := "moka-docs",
     git.remoteRepo := "git@github.com:vimalaguti/moka.git"
   )
