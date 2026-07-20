@@ -38,9 +38,11 @@ object Moka:
 
     val namesAndValues =
       classSym.caseFields.map(field => field.name -> bsonName(field))
+    // refine with the literal type of the value (like the Scala 2 macro),
+    // e.g. `val a: "abc"` for @BsonProperty("abc") a
     val refined = namesAndValues.foldLeft(TypeRepr.of[FieldNames]) {
-      case (tpe, (fieldName, _)) =>
-        Refinement(tpe, fieldName, TypeRepr.of[String])
+      case (tpe, (fieldName, value)) =>
+        Refinement(tpe, fieldName, ConstantType(StringConstant(value)))
     }
     val values = Expr(namesAndValues.toMap)
     refined.asType match

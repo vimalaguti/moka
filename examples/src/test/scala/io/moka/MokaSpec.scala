@@ -62,4 +62,14 @@ class MokaSpec extends munit.FunSuite {
     val errors = compileErrors("ManyFields.Fields.typo")
     assert(errors.contains("value typo is not a member"), errors)
   }
+
+  test("field names are literal types") {
+    val a: "a" = ManyFields.Fields.a
+    assertEquals(a, "a")
+  }
+
+  test("bson renamed fields are literal types of the bson name") {
+    val abc: "abc" = DiffFields.Fields.a
+    assertEquals(abc, "abc")
+  }
 }
