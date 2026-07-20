@@ -9,4 +9,22 @@ class Scala3MokaSpec extends munit.FunSuite {
     assertEquals(PlainFields.Fields.a, "a")
     assertEquals(PlainFields.Fields.b, "b")
   }
+
+  test("bson annotations rename the field value") {
+    assertEquals(BsonFields.Fields.a, "renamed")
+    assertEquals(BsonFields.Fields.b, "znamed")
+  }
+
+  test("custom name is just the val name") {
+    assertEquals(CustomName.Renamed.a, "a")
+  }
+
+  test("existing companion members are preserved") {
+    assertEquals(WithMembers.Fields.a, "a")
+    assertEquals(WithMembers.default, WithMembers(0))
+  }
+
+  test("nested case class uses the outer field name") {
+    assertEquals(Nested.Fields.inner, "inner")
+  }
 }
