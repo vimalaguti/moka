@@ -12,26 +12,35 @@ object Moka:
   class FieldNames(values: Map[String, String]) extends Selectable:
     def selectDynamic(name: String): String = values(name)
 
-  transparent inline def generateFields[T]: FieldNames = ${ generateFieldsImpl[T] }
+  transparent inline def generateFields[T]: FieldNames = ${
+    generateFieldsImpl[T]
+  }
 
   private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
     import quotes.reflect.*
 
     val classSym = TypeRepr.of[T].typeSymbol
     if !classSym.flags.is(Flags.Case) then
-      report.errorAndAbort(s"Moka.generateFields[${classSym.name}] requires a case class")
+      report.errorAndAbort(
+        s"Moka.generateFields[${classSym.name}] requires a case class"
+      )
 
     def bsonName(field: Symbol): String =
-      val ctorParam = classSym.primaryConstructor.paramSymss.flatten.find(_.name == field.name)
-      (field.annotations ++ ctorParam.toList.flatMap(_.annotations)).collectFirst {
-        case ann @ Apply(_, List(Literal(StringConstant(value))))
-            if ann.tpe.typeSymbol.name == "BsonProperty" || ann.tpe.typeSymbol.name == "bsonField" =>
-          value
-      }.getOrElse(field.name)
+      val ctorParam = classSym.primaryConstructor.paramSymss.flatten
+        .find(_.name == field.name)
+      (field.annotations ++ ctorParam.toList.flatMap(_.annotations))
+        .collectFirst {
+          case ann @ Apply(_, List(Literal(StringConstant(value))))
+              if ann.tpe.typeSymbol.name == "BsonProperty" || ann.tpe.typeSymbol.name == "bsonField" =>
+            value
+        }
+        .getOrElse(field.name)
 
-    val namesAndValues = classSym.caseFields.map(field => field.name -> bsonName(field))
-    val refined = namesAndValues.foldLeft(TypeRepr.of[FieldNames]) { case (tpe, (fieldName, _)) =>
-      Refinement(tpe, fieldName, TypeRepr.of[String])
+    val namesAndValues =
+      classSym.caseFields.map(field => field.name -> bsonName(field))
+    val refined = namesAndValues.foldLeft(TypeRepr.of[FieldNames]) {
+      case (tpe, (fieldName, _)) =>
+        Refinement(tpe, fieldName, TypeRepr.of[String])
     }
     val values = Expr(namesAndValues.toMap)
     refined.asType match

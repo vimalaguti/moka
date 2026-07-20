@@ -19,7 +19,7 @@ object Definitions {
   final case class ManyFields(a: Int, b: Int)
   object ManyFields {
     def apply(): ManyFields = ManyFields(1, 2)
-    val Fields = Moka.generateFields[ManyFields]
+    val Fields              = Moka.generateFields[ManyFields]
   }
 
   @moka
@@ -41,7 +41,7 @@ object Definitions {
   @moka
   case class WithCompanionObject(a: Int)
   object WithCompanionObject {
-    val b = 3
+    val b                                         = 3
     def someFunction(a: Int): WithCompanionObject = WithCompanionObject(a)
     val Fields = Moka.generateFields[WithCompanionObject]
   }
@@ -64,13 +64,13 @@ object Definitions {
   @moka
   final case class BsonAnnotatedClassCO(@BsonProperty("b") a: Int)
   object BsonAnnotatedClassCO {
-    val a = 0
+    val a      = 0
     val Fields = Moka.generateFields[BsonAnnotatedClassCO]
   }
   @moka
   final case class ZioBsonAnnotatedClassCO(@bsonField("b") a: Int)
   object ZioBsonAnnotatedClassCO {
-    val a = 0
+    val a      = 0
     val Fields = Moka.generateFields[ZioBsonAnnotatedClassCO]
   }
 }
