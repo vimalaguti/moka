@@ -12,6 +12,8 @@ object Moka {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
   }
 
+  def generateFields[T]: Unit = ()
+
   object mokaMacro {
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
       import c.universe._
