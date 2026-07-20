@@ -12,9 +12,7 @@ instead of a silent production bug.
 
 ```scala mdoc
 import io.moka.Moka
-import io.moka.Moka.moka
 
-@moka
 case class Apple(color: String)
 object Apple {
   val Fields = Moka.generateFields[Apple]
@@ -27,17 +25,19 @@ Apple.Fields.color
 Apple.Fields.colour // typo -> compile error
 ```
 
+Head over to [Features](features.md) for what the generated `Fields` object
+can do.
+
 ## Supported Scala versions
 
 | Scala          | mechanism                                        |
 | -------------- | ------------------------------------------------ |
-| 2.13           | `@moka` macro annotation                         |
 | 3 (3.3 LTS+)   | `Moka.generateFields[T]` inline macro            |
+| 2.13           | `@moka` macro annotation                         |
 | cross-compiled | both combined — same sources build on 2.13 and 3 |
 
-See the [Scala 2](scala2.md), [Scala 3](scala3.md) and
-[cross-compilation](cross.md) pages for the version-specific usage, and
-[Features](features.md) for what the generated `Fields` object can do.
+See the [Scala 3](scala3.md), [Scala 2](scala2.md) and
+[cross-compilation](cross.md) pages for the version-specific usage.
 
 ## Installation
 

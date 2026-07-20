@@ -1,11 +1,13 @@
 ---
-sidebar_position: 5
+sidebar_position: 2
 ---
 
 # Features
 
-Everything on this page works identically on Scala 2.13 and Scala 3; the
-snippets use the [cross-compiled style](cross.md).
+The snippets on this page use Scala 3. Everything works identically on
+Scala 2.13 and in cross-compiled sources — only the way `Fields` is declared
+changes, see the [Scala 2](scala2.md) and [cross-compilation](cross.md)
+pages.
 
 ## What it does
 
@@ -15,9 +17,7 @@ name, see below). Misspelled names fail at compile time.
 
 ```scala mdoc
 import io.moka.Moka
-import io.moka.Moka.moka
 
-@moka
 case class Apple(color: String, ripe: Boolean)
 object Apple {
   val Fields = Moka.generateFields[Apple]
@@ -42,11 +42,9 @@ val name: "color" = Apple.Fields.color
 
 ## Renaming the Fields object
 
-The generated object can have any name: name the val as you like (and pass
-the same name to the annotation for Scala 2):
+The generated object can have any name — it is simply the name of the val:
 
 ```scala mdoc
-@moka("Params")
 case class Renamed(a: Int)
 object Renamed {
   val Params = Moka.generateFields[Renamed]
@@ -54,6 +52,8 @@ object Renamed {
 
 Renamed.Params.a
 ```
+
+(On Scala 2 the name is passed to the annotation instead: `@moka("Params")`.)
 
 ## Bson annotations
 
@@ -66,7 +66,6 @@ annotation and zio-bson are supported:
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
 
-@moka
 case class Fruit(@BsonProperty("c") color: String, @bsonField("w") weight: Double)
 object Fruit {
   val Fields = Moka.generateFields[Fruit]
