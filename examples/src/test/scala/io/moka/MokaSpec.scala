@@ -57,4 +57,9 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(ZioBsonAnnotatedClassCO.Fields.a, "b")
     assertEquals(ZioBsonAnnotatedClassCO.a, 0)
   }
+
+  test("misspelled field names do not compile") {
+    val errors = compileErrors("ManyFields.Fields.typo")
+    assert(errors.contains("value typo is not a member"), errors)
+  }
 }
