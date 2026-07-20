@@ -31,15 +31,15 @@ object Moka {
 
       def extractCompanionObjectParts(cobject: ModuleDef) =
         cobject match {
-          case q"$mods object $tname extends { ..$earlydefns } with ..$parents { $self => ..$stats }" =>
-            (mods, tname, earlydefns, parents, self, stats)
+          case q"$mods object $tname extends ..$parents { $self => ..$stats }" =>
+            (mods, tname, parents, self, stats)
         }
 
       def extractCaseClassParts(
           classDecl: ClassDef
       ): (TypeName, List[List[ValDef]]) =
         classDecl match {
-          case q"$mods class $tpname[..$tparams] $ctorMods(...$paramss) extends { ..$earlydefns } with ..$parents { $self => ..$stats }" =>
+          case q"$mods class $tpname[..$tparams] $ctorMods(...$paramss) extends ..$parents { $self => ..$stats }" =>
             if (mods.hasFlag(Flag.CASE)) (tpname, paramss)
             else
               c.abort(
@@ -100,7 +100,7 @@ object Moka {
         case (classDecl: ClassDef) :: (singleton: ModuleDef) :: Nil =>
           // extract case class and companion object
           val (className, fields) = extractCaseClassParts(classDecl)
-          val (mods, tname, earlydefns, parents, self, stats) = extractCompanionObjectParts(singleton)
+          val (mods, tname, parents, self, stats) = extractCompanionObjectParts(singleton)
 
           // generate the names
           val generatedTerms = generateFieldNames(fields.head)
@@ -123,7 +123,7 @@ object Moka {
           val companion =
             q"""
             $classDecl // original class
-            $mods object ${tname.toTermName} extends { ..$earlydefns } with ..$parents { $self =>
+            $mods object ${tname.toTermName} extends ..$parents { $self =>
               ..$newStats
             }
             """
