@@ -12,6 +12,9 @@ object Moka {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
   }
 
+  @compileTimeOnly(
+    "Moka.generateFields is a placeholder rewritten by @moka: annotate the case class with @moka"
+  )
   def generateFields[T]: Unit = ()
 
   object mokaMacro {

@@ -37,4 +37,9 @@ class Scala2MokaSpec extends munit.FunSuite {
     assertEquals(RenamedWithCompanion.Renamed.a, "a")
     assertEquals(RenamedWithCompanion.default.a, 1)
   }
+
+  // Note: generateFields without @moka is rejected by @compileTimeOnly
+  // ("placeholder rewritten by @moka"). Not tested via munit compileErrors:
+  // on Scala 2 it typechecks without the refchecks phase that enforces
+  // @compileTimeOnly, so the error is only visible in real compilation.
 }
