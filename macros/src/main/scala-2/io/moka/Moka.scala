@@ -1,31 +1,33 @@
-package io.moka
+package io
 
 import scala.annotation.{StaticAnnotation, compileTimeOnly}
 import scala.language.experimental.macros
 import scala.reflect.macros.whitebox
 
+package object moka {
 
-object Moka {
+  @compileTimeOnly(
+    "io.moka.generateFields is a placeholder rewritten by @moka: annotate the case class with @moka"
+  )
+  def generateFields[T]: Unit = ()
+}
+
+package moka {
 
   @compileTimeOnly("enable macro paradise to expand macro annotations")
   class moka(name: String = "Fields") extends StaticAnnotation {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
   }
 
-  @compileTimeOnly(
-    "Moka.generateFields is a placeholder rewritten by @moka: annotate the case class with @moka"
-  )
-  def generateFields[T]: Unit = ()
-
   object mokaMacro {
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
       import c.universe._
 
-      def extractObjectDestinationName: TermName = 
+      def extractObjectDestinationName: TermName =
         c.prefix.tree match {
           case Apply(_, Literal(Constant(name: String)) :: Nil) => TermName(name)
-          case Apply(_, Nil) => TermName("Fields")
-          case _ => 
+          case Apply(_, Nil)                                    => TermName("Fields")
+          case _ =>
             c.abort(c.enclosingPosition, "Invalid annotation arguments")
         }
 
@@ -52,16 +54,18 @@ object Moka {
       def generateFieldNames(terms: List[ValDef]) = {
         terms.map {
           case q"$mods val $name: $tpt = $rhs" =>
-            val annotationName = mods.annotations.collect{
-              case Apply(Select((New(Ident(TypeName("BsonProperty"))), _)), Literal(Constant(annName: String)) :: Nil) => Some(annName)
-              case Apply(Select((New(Ident(TypeName("bsonField"))), _)), Literal(Constant(annName: String)) :: Nil) => Some(annName)
+            val annotationName = mods.annotations.collect {
+              case Apply(Select((New(Ident(TypeName("BsonProperty"))), _)), Literal(Constant(annName: String)) :: Nil) =>
+                Some(annName)
+              case Apply(Select((New(Ident(TypeName("bsonField"))), _)), Literal(Constant(annName: String)) :: Nil) =>
+                Some(annName)
               case _ => None
-            }.flatten.headOption 
-            
+            }.flatten.headOption
+
             val termName = TermName(name.decodedName.toString())
             val bsonName = annotationName.getOrElse(name.decodedName.toString())
-            val value = q"${bsonName}"
-            val tpe = tq"${bsonName}"
+            val value    = q"${bsonName}"
+            val tpe      = tq"${bsonName}"
 
             val definition = ValDef(Modifiers(), termName, tpe, value)
 
@@ -85,7 +89,7 @@ object Moka {
           val generatedTerms = generateFieldNames(fields.head)
 
           // generate Fields object
-          val objectName = extractObjectDestinationName
+          val objectName   = extractObjectDestinationName
           val objectFields = q"object $objectName { ..$generatedTerms }"
 
           val companion =
@@ -99,14 +103,14 @@ object Moka {
 
         case (classDecl: ClassDef) :: (singleton: ModuleDef) :: Nil =>
           // extract case class and companion object
-          val (className, fields) = extractCaseClassParts(classDecl)
-          val (mods, tname, parents, self, stats) = extractCompanionObjectParts(singleton)
+          val (className, fields)                  = extractCaseClassParts(classDecl)
+          val (mods, tname, parents, self, stats)  = extractCompanionObjectParts(singleton)
 
           // generate the names
           val generatedTerms = generateFieldNames(fields.head)
-          val objectName = extractObjectDestinationName
+          val objectName     = extractObjectDestinationName
 
-          // replace placeholder vals (val X = Moka.generateFields[T]) with the
+          // replace placeholder vals (val X = generateFields[T]) with the
           // generated object, so cross-compiled sources can share definitions
           // with the Scala 3 inline macro
           var replacedPlaceholder = false
@@ -132,5 +136,4 @@ object Moka {
       }
     }
   }
-
 }
