@@ -9,7 +9,7 @@ generates the companion object (or extends an existing one) with the `Fields`
 object. Requires the `-Ymacro-annotations` compiler flag.
 
 ```scala
-import io.moka.Moka.moka
+import io.moka._
 
 @moka
 case class Simple(color: String)

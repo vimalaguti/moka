@@ -16,11 +16,11 @@ member with the same name whose **value** is the field's name (or its bson
 name, see below). Misspelled names fail at compile time.
 
 ```scala mdoc
-import io.moka.Moka
+import io.moka.*
 
 case class Apple(color: String, ripe: Boolean)
 object Apple {
-  val Fields = Moka.generateFields[Apple]
+  val Fields = generateFields[Apple]
 }
 
 Apple.Fields.color
@@ -47,7 +47,7 @@ The generated object can have any name — it is simply the name of the val:
 ```scala mdoc
 case class Renamed(a: Int)
 object Renamed {
-  val Params = Moka.generateFields[Renamed]
+  val Params = generateFields[Renamed]
 }
 
 Renamed.Params.a
@@ -68,7 +68,7 @@ import zio.bson.bsonField
 
 case class Fruit(@BsonProperty("c") color: String, @bsonField("w") weight: Double)
 object Fruit {
-  val Fields = Moka.generateFields[Fruit]
+  val Fields = generateFields[Fruit]
 }
 
 Fruit.Fields.color

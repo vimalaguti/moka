@@ -29,7 +29,7 @@ class Scala3MokaSpec extends munit.FunSuite {
   }
 
   test("generateFields on a non-case class is a compile error") {
-    val errors = compileErrors("Moka.generateFields[String]")
+    val errors = compileErrors("generateFields[String]")
     assert(errors.contains("requires a case class"), errors)
   }
 }

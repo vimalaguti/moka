@@ -12,13 +12,12 @@ codebases sharing the same sources.
 Cross-compiled style (works on both versions):
 
 ```scala
-import io.moka.Moka
-import io.moka.Moka.moka
+import io.moka.*
 
 @moka
 case class Apple(color: String)
 object Apple {
-  val Fields = Moka.generateFields[Apple]
+  val Fields = generateFields[Apple]
 }
 
 Apple.Fields.color == "color"
@@ -39,7 +38,7 @@ Scala 3 only — no annotation needed:
 ```scala
 case class Apple(color: String)
 object Apple {
-  val Fields = Moka.generateFields[Apple]
+  val Fields = generateFields[Apple]
 }
 ```
 
@@ -52,7 +51,7 @@ Fields annotated with `@BsonProperty` (mongo-scala-bson) or `@bsonField`
 @moka
 case class Fruit(@BsonProperty("c") color: String)
 object Fruit {
-  val Fields = Moka.generateFields[Fruit]
+  val Fields = generateFields[Fruit]
 }
 
 Fruit.Fields.color == "c"

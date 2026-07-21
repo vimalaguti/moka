@@ -11,11 +11,11 @@ don't need hardcoded strings, and a misspelled field name is a compile error
 instead of a silent production bug.
 
 ```scala mdoc
-import io.moka.Moka
+import io.moka.*
 
 case class Apple(color: String)
 object Apple {
-  val Fields = Moka.generateFields[Apple]
+  val Fields = generateFields[Apple]
 }
 
 Apple.Fields.color
@@ -32,7 +32,7 @@ can do.
 
 | Scala          | mechanism                                        |
 | -------------- | ------------------------------------------------ |
-| 3 (3.3 LTS+)   | `Moka.generateFields[T]` inline macro            |
+| 3 (3.3 LTS+)   | `generateFields[T]` inline macro            |
 | 2.13           | `@moka` macro annotation                         |
 | cross-compiled | both combined — same sources build on 2.13 and 3 |
 
