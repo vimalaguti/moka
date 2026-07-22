@@ -1,6 +1,6 @@
 package io.moka
 
-import Definitions._
+import Definitions.*
 
 class MokaSpec extends munit.FunSuite {
 

@@ -1,6 +1,6 @@
 package io.moka
 
-import Scala3Definitions._
+import Scala3Definitions.*
 
 /** Scala 3-only usage: generateFields without the @moka annotation. */
 class Scala3MokaSpec extends munit.FunSuite {
