@@ -1,6 +1,6 @@
 package io.moka
 
-import Scala2Definitions._
+import Scala2Definitions.*
 
 /** Scala 2-only usage: @moka generates or rewrites the companion object,
   * no placeholder val needed.
