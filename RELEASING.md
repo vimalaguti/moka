@@ -76,6 +76,26 @@ sbt docs/mdoc && (cd website && npm run build)
   `No access to secret variables, doing nothing`. A green release run that published nothing
   means a missing secret, not a successful release — check the log.
 
+## Signing locally
+
+`sbt-pgp` shells out to `gpg --detach-sign --armor --use-agent`, which needs a way to ask for
+the key's passphrase. From a non-interactive shell or a script it fails with
+
+```
+gpg: signing failed: Inappropriate ioctl for device
+```
+
+That is the missing passphrase prompt, not a bad key. Either export a tty so the agent can
+prompt, in an interactive shell:
+
+```bash
+export GPG_TTY=$(tty)
+```
+
+or cache the passphrase once (`echo test | gpg --clearsign > /dev/null`) and let the agent
+serve it for the rest of its lifetime. CI does not need any of this — sbt-ci-release imports
+`PGP_SECRET` and unlocks it with `PGP_PASSPHRASE` non-interactively.
+
 ## Doing it by hand
 
 Useful for inspecting a bundle before it goes public. Requires the PGP key locally.
