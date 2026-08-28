@@ -188,6 +188,54 @@ free of it confines the collision to nested types, and costs only an internal
 asymmetry (`FieldNames` as the Scala 3 root type, a plain object on Scala 2) that
 never appears in user code.
 
+### Compile-time cost, measured
+
+The residual risk below worried about refinement growth. Measured with
+`scripts/bench-compile.sh` on synthetic models (width 8, varying depth and
+branching), clean compile of a single generated file, semanticdb off:
+
+| members | Scala 2.13.18 | Scala 3.3.8 |
+|---|---|---|
+| 8 | 5 s | 6 s |
+| 44 | 6 s | 8 s |
+| 116 | 8 s | 9 s |
+| 359 | 11 s | 12 s |
+| 1088 | 15 s | 17 s |
+
+About 5-6 s of each figure is fixed overhead, so the marginal cost is roughly
+linear in member count at ~10 ms per member, and Scala 2 — which emits real
+nested objects — is consistently slightly *faster* than Scala 3's refinement
+chain. Growth is not the quadratic blow-up the risk anticipated.
+
+This is what makes the array hop affordable. Exposing descendable `matched`
+(`$`) and `all` (`$[]`) nodes means emitting each element subtree three times,
+and tripling a realistic model's member count costs a few seconds of marginal
+compile time, not minutes.
+
+### Runtime cost, measured
+
+The open question `javap` could not answer: since `Fields` is a stable val
+holding a small immutable `Map` keyed by compile-time constants, would the JIT
+inline and fold the whole chain away? JMH says no. Average time per access,
+`bench-jmh`, one fork, 5x0.5s warmup and measurement:
+
+| | Scala 2.13.18 | Scala 3.3.8 |
+|---|---|---|
+| baseline (a literal) | 0.63 ns | 0.58 ns |
+| 1 hop | 0.59 ns | 1.68 ns |
+| 2 hops | 0.93 ns | 5.80 ns |
+| 3 hops | 0.59 ns | 8.44 ns |
+
+Scala 2 is indistinguishable from the baseline at every depth, which confirms
+the constant folding seen in the bytecode — the paths genuinely cost nothing.
+Scala 3 pays roughly 2.6 ns per additional hop and does not fold, so C2 does not
+see through `selectDynamic` even on a stable receiver with constant keys.
+
+Eight nanoseconds for a three-level path, against a network round trip of
+roughly a million, is not a reason to change the design. It does mean the array
+hop's extra segment (`items.$.qty` rather than `items.qty`) costs about 2.6 ns
+on Scala 3 and nothing on Scala 2 — still immaterial.
+
 ### Accepted residual risks
 
 - A nested case class with a field literally named `path` collides with the accessor.

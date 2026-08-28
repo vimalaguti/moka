@@ -55,6 +55,34 @@ lazy val docs = project
   .dependsOn(examples)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, GhpagesPlugin)
 
+/** Not aggregated by `root`, so it never runs in CI. Its sources are generated
+  * by scripts/gen-bench-model.py and are git-ignored.
+  */
+lazy val bench = project
+  .settings(scalacOptionsCommon)
+  .settings(
+    crossScalaVersions := supportedScalaVersions,
+    publish / skip     := true,
+    // measurement noise, and semanticdb-scalac has no build for every 2.13 patch
+    semanticdbEnabled := false
+  )
+  .dependsOn(macros)
+
+/** Runtime benchmark: how much does Scala 3's selectDynamic chain actually cost
+  * once the JIT has had a look? Not aggregated by `root`.
+  * Run with: sbt "benchJmh/Jmh/run -f1 .*PathBenchmark.*"
+  */
+lazy val benchJmh = project
+  .in(file("bench-jmh"))
+  .enablePlugins(JmhPlugin)
+  .settings(scalacOptionsCommon)
+  .settings(
+    crossScalaVersions := supportedScalaVersions,
+    publish / skip     := true,
+    semanticdbEnabled  := false
+  )
+  .dependsOn(macros)
+
 lazy val macros = project
   .settings(scalacOptionsCommon)
   .settings(
