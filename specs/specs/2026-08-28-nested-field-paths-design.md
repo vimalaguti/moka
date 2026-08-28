@@ -49,9 +49,10 @@ Rules that must hold:
    class* as the annotated case class. Such a field aborts compilation with a
    diagnostic naming the type and the constraint. Top-level types in the same file,
    and types in any other file, resolve normally. Scala 3 has no such constraint.
-8. **Node to String is explicit.** `node.path` is the API; there is no implicit
-   bridge. If a conversion is ever added it must be an opt-in import and never the
-   `FieldPath` companion — see the record below for why.
+8. **Node to String is explicit by default.** `node.path` is the API everywhere.
+   The opt-in `import io.moka.syntax._` — the same line on both Scala versions —
+   additionally lets a node stand in for its own path where a `String` is expected.
+   The conversion is never in implicit scope by default.
 9. **Surface** — `generateFields[T]` yields the root, refined with `T`'s members.
    The root deliberately carries **no** `path` member, so a top-level field named
    `path` cannot collide with the accessor. `FieldPath` is reachable through the
@@ -69,9 +70,11 @@ with cycle detection; (2) `Option` / `Iterable` transparency. Within stage 1 the
 Scala 2 macro goes first — it is the constrained side, and a surprise there
 reshapes the shared contract.
 
-The implicit conversion is deferred out of v1 entirely. It is sugar; `.path`
-covers every call site without it, and deferring removes the cross-version
-asymmetry described below from the first release.
+`FieldPath` is a trait carrying only `def path: P`. On Scala 2 the generated
+nested objects extend it directly and the compiler folds every selection to a
+constant; on Scala 3 it is the shared supertype of the concrete `PathNode` the
+macro instantiates. The opt-in conversion is defined against the trait, once per
+version.
 
 ## Part B — Record
 
@@ -151,15 +154,28 @@ Accepted risk: a field whose type is unresolvable for an unrelated reason — a 
 alias declared as a sibling member, say — aborts even though it is a leaf. Judged
 rare; the diagnostic must be explicit enough to point at the fix.
 
-### The conversion is opt-in, and why
+### The conversion is opt-in, and is an `implicit def`
 
-Scala 2 applies an implicit conversion at the use site silently. Scala 3 emits a
-feature warning at every use site unless the consumer adds
-`import scala.language.implicitConversions`. Putting the conversion in the
-`FieldPath` companion — where it would always be in implicit scope — therefore makes
-the default experience *asymmetric across versions*, which contradicts the library's
-premise. Moving it to an explicit `io.moka.syntax` import makes both versions
-behave the same and leaves the default path warning-free.
+Two findings, both measured, shaped this.
+
+**It must be an `implicit def`, not a `given Conversion`.** A wildcard import does
+not bring `given` instances into scope on Scala 3 — that needs
+`import io.moka.syntax.given`, which Scala 2 cannot parse. There is then no single
+import line that works in cross-compiled sources, which defeats the point of the
+library. An old-style `implicit def` is imported by `import io.moka.syntax._` on
+both versions.
+
+**The feature-warning argument for opt-in was wrong.** An earlier probe found that
+applying a `given Conversion` on Scala 3 warns at the use site unless the consumer
+adds `import scala.language.implicitConversions`, and that asymmetry was the stated
+reason to keep the conversion out of implicit scope. Re-measured with an
+`implicit def`: no feature warning on either version. That argument no longer holds.
+
+It stays opt-in for the surviving reason — the conversion fires only in
+expected-type positions, so in inference positions it silently produces the wrong
+type rather than an error (`Map(Fields.a -> 1)` infers a `Map` keyed by the node).
+Keeping it out of implicit scope means that mistake is a compile error by default,
+and only the people who ask for the sugar take on the footgun.
 
 ### The root is not a `FieldPath`
 
@@ -178,6 +194,15 @@ never appears in user code.
   It fails loudly at compile time on both versions (the refinement cannot conform),
   so it is not a correctness hazard. A configurable accessor name is deferred until
   someone hits it.
+- **The conversion breaks SemanticDB extraction on Scala 3.** In any file that
+  applies it to a node, the compiler reports `Internal error in extracting
+  SemanticDB ... Ignoring <field> of symbol class FieldNames` and emits no index
+  for that file — Metals then loses go-to-definition and find-references there.
+  Compilation itself succeeds; it is a warning. Verified by removing the single
+  test that uses the conversion, which makes it disappear. It is a bug in the
+  SemanticDB extractor's handling of a synthetic conversion applied to a deeply
+  refined type, not something moka can fix. Scala 2 is unaffected. This is a
+  further reason the conversion is opt-in rather than always in scope.
 - **Mutually recursive models break the Scala 2 compiler.** `@moka case class A(b: B)`
   with `case class B(back: A)` makes `c.typecheck(B)` force `B`'s info, which
   references `A`, which re-enters `A`'s own in-progress annotation expansion —
