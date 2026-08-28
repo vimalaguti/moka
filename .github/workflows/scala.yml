@@ -32,4 +32,4 @@ jobs:
     - name: Check formatting
       run: sbt "scalafmtCheckAll; scalafmtSbtCheck"
     - name: Run tests
-      run: sbt +test
+      run: sbt +testFull

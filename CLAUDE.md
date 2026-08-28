@@ -15,20 +15,31 @@ almost every design decision in the repo.
 
 ```bash
 sbt compile                                     # current scalaVersion only (3.3.8 LTS)
-sbt test                                        # ditto
-sbt +test                                       # 2.13.18, 3.3.8 and 3.9.0 — what CI runs
+sbt testFull                                    # ditto. NOT `test` — see below
+sbt +testFull                                   # 2.13.18, 3.3.8 and 3.9.0 — what CI runs
 sbt "examples/testOnly io.moka.MokaSpec"        # single suite (shared tests)
-sbt "++2.13.18" "examples/testOnly io.moka.Scala2MokaSpec"  # 2.13-only suite
+sbt "++2.13.18; examples/testOnly io.moka.Scala2MokaSpec"  # 2.13-only suite
 sbt "examples/testOnly io.moka.Scala3MokaSpec"             # 3.x-only suite
 sbt scalafmtAll                                 # format
-sbt scalafmtCheckAll scalafmtSbtCheck           # what CI checks
+sbt "scalafmtCheckAll; scalafmtSbtCheck"        # what CI checks
 sbt examples/run                                # small demo (aliased as `sbt run`)
 sbt docs/mdoc                                   # compile docs/*.md -> moka-docs/target/mdoc
+sbt bloopInstall                                # refresh .bloop/ for the bloop-build skill
 MOKA_DEBUG=1 sbt compile                        # Scala 3: print post-inlining trees
 ```
 
+**Two sbt 2 command shapes that silently do the wrong thing:**
+
+- **`test` is incremental in sbt 2** — it is what sbt 1 called `testQuick`, and it reports
+  `Passed: Total 0` / `No tests to run` when nothing changed. `testFull` is sbt 1's `test`.
+  A green `sbt test` therefore proves nothing on its own; CI runs `+testFull`.
+- **sbt 2 takes one command per argument.** `sbt a b` is parsed as the single command `a b`
+  and fails with `Not a valid key`. Use `sbt "a; b"`, which also works on sbt 1.
+
 Website (Docusaurus 3, in `website/`): `npm install && npm start`. It reads its docs from
 `../moka-docs/target/mdoc`, so **run `sbt docs/mdoc` first** or the site has no content.
+That path is only stable because `docs / mdocOut` is pinned in `build.sbt` — sbt 2's default
+target layout is `target/out/jvm/<scalaVersion>/moka-docs/mdoc`.
 
 sbt modules: `root` (aggregate), `macros` (the library, `name := "moka"`), `examples`
 (demo + all tests), `docs` (rooted at `moka-docs/`, mdoc + Docusaurus + ghpages).
@@ -156,11 +167,14 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
   moka aborts with a diagnostic rather than degrading to a leaf. Mutually recursive models
   cannot be expanded at all on Scala 2 (re-entrant annotation expansion → `StackOverflowError`).
 - **zinc does not always invalidate `examples` when only a macro body changes.** If a macro edit
-  seems to have no effect, `sbt "++<ver>" macros/clean examples/clean <task>` before concluding
+  seems to have no effect, `sbt "++<ver>; macros/clean; examples/clean; <task>"` before concluding
   the logic is wrong.
 - The checked-in `.bloop/` config is **stale** (exported for Scala 3.6.4; the build now targets
   3.3.8) and holds only one Scala version. Run `sbt bloopInstall` before using the bloop-build
-  skill, and use plain sbt for anything cross-version (`+test`, `++2.13.18 ...`).
+  skill, and use plain sbt for anything cross-version (`+testFull`, `"++2.13.18; ..."`).
+  **sbt 2 has no global plugins directory** — neither `~/.config/sbt/2/plugins/build.sbt` nor
+  `~/.config/sbt/2/global.sbt` is read (verified) — so `sbt-bloop` is declared in this repo's
+  own `project/plugins.sbt`. The sbt-1 global plugins in `~/.sbt/1.0/plugins/` are ignored.
 - `.github/copilot-instructions.md` is **out of date**: it refers to a `core` module (now
   `examples`) and `scala-2.13` source dirs (now `scala-2`), and predates the Scala 3 support.
   Prefer this file.
@@ -170,7 +184,7 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
   2.13.18 / 3.3.8 LTS / 3.9.0; `publishedScalaVersions` drops 3.9.0. `macros` has to *build* on
   3.9.0 only because `examples` depends on it, so it carries
   `publish / skip := !publishedScalaVersions.contains(scalaVersion.value)` — `+publish` cannot
-  emit a 3.9.0 artifact. Verify with `sbt "++3.9.0" "show macros/publish/skip"` (expects `true`).
+  emit a 3.9.0 artifact. Verify with `sbt "++3.9.0; show macros/publish/skip"` (expects `true`).
 - **Publishing: configured, waiting on a PGP key.** groupId is `io.github.vimalaguti` (the
   Scala package stays `io.moka`); `description`, `homepage`, `licenses`, `scmInfo`,
   `developers`, `versionScheme` and `pomIncludeRepository` are set at `ThisBuild` level, so
