@@ -38,6 +38,29 @@ final case class Renamed(a: Int)
 Renamed.Params.a == "a"
 ```
 
+## Nested fields
+
+The annotation descends into nested case classes exactly as the cross-compiled
+style does, with or without a companion object of your own:
+
+```scala
+final case class Engine(power: Int)
+
+object Model {
+  @moka
+  final case class Car(engine: Engine, wheels: List[Engine])
+}
+
+Car.Fields.engine.power          == "engine.power"
+Car.Fields.wheels._matched.power == "wheels.$.power"
+```
+
+Note where `Engine` is declared. Scala 2 has one restriction Scala 3 does not:
+the nested type may **not** be a member of the same object or class as the
+annotated case class, because the annotation macro runs before the typer and
+cannot see it. moka fails with an error naming the type. See
+[cross-compilation](cross.md) for the details.
+
 ## Full code
 
 Every supported case is covered by the test suite:

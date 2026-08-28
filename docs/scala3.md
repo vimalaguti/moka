@@ -36,6 +36,22 @@ Using it on something that is not a case class is a compile error:
 generateFields[String]
 ```
 
+Nested types may be declared anywhere, including beside the annotated class —
+the Scala 2 restriction described on the [cross-compilation](cross.md) page does
+not apply here:
+
+```scala mdoc
+object Bicycle {
+  case class Cog(teeth: Int)
+  case class Chainring(cogs: List[Cog])
+  object Chainring {
+    val Fields = generateFields[Chainring]
+  }
+}
+
+Bicycle.Chainring.Fields.cogs._all.teeth
+```
+
 Works on Scala 3.3 LTS and later, with no experimental features.
 
 ## Full code

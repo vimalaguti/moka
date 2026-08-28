@@ -92,14 +92,33 @@ Car.Fields.engine.power
 Car.Fields.plate
 ```
 
-A node's own path is `_path`. Every member moka generates is underscore-prefixed,
-so it can never collide with a field of yours. Literal types survive the descent:
+Literal types survive the descent:
+
+```scala mdoc
+val hp: "engine.hp" = Car.Fields.engine.power
+```
+
+### Generated members
+
+Every member moka generates starts with an underscore. Anything *without* one is
+a field of yours, so the two can never collide — a case class with a field called
+`matched` sits happily next to the `_matched` operator.
+
+| Member     | Appears on       | MongoDB | Meaning                            |
+| ---------- | ---------------- | ------- | ---------------------------------- |
+| `_path`    | every node       | —       | the node's own dotted path         |
+| `_matched` | collection nodes | `$`     | the first element the query matched |
+| `_all`     | collection nodes | `$[]`   | every element                      |
 
 ```scala mdoc
 Car.Fields.engine._path
-
-val hp: "engine.hp" = Car.Fields.engine.power
 ```
+
+`_matched` and `_all` appear **only** on a field whose type is a collection of
+case classes. An `Option` does not get them — an optional sub-document is not an
+array — and neither does a collection of a non-case-class type such as
+`List[String]`, which stays a plain leaf. They also do not nest: an operator hop
+is not itself an array, so `_matched._matched` is a compile error.
 
 `Option` and collections are transparent, because MongoDB uses the same dotted
 path whether a sub-document is optional, inside an array, or neither:
@@ -132,10 +151,26 @@ Bike.Fields.wheels._matched.diameter
 Bike.Fields.wheels._all.diameter
 ```
 
-`_matched` is the positional operator `$` (the first element that matched the
-query) and `_all` is `$[]` (every element). They do not nest — an operator hop is
-not itself an array — and a collection of a non-case-class type, such as
-`List[String]`, stays a plain leaf.
+Which is what makes an array update expressible without string literals. To bump
+the wheel a query just matched, use `_matched`:
+
+```scala mdoc
+import org.mongodb.scala.bson.collection.immutable.Document
+
+val query = Document(Bike.Fields.wheels.diameter -> 26)
+val bumpMatched =
+  Document("$set" -> Document(Bike.Fields.wheels._matched.diameter -> 27))
+```
+
+To bump every wheel regardless of what matched, use `_all`:
+
+```scala mdoc
+val bumpAll =
+  Document("$set" -> Document(Bike.Fields.wheels._all.diameter -> 27))
+```
+
+Rename `diameter`, or change its `@BsonProperty`, and all three of those stop
+compiling rather than silently matching nothing.
 
 Descent stops at value classes (stored flattened, so the path is the outer
 field's), at `Map` (naming a value needs a key), and at any type already on the
