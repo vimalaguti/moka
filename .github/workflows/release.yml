@@ -39,12 +39,10 @@ jobs:
     - name: Test and release
       run: sbt "+testFull; ci-release"
       env:
-        # Stops ci-release after signing and uploading the bundle, instead of
-        # promoting it. Inspect the deployment on the Central Portal and hit
-        # Publish by hand. Maven Central is immutable, so this gate is worth
-        # keeping until a release has actually gone through once; remove the
-        # line to have tags publish on their own.
-        CI_SONATYPE_RELEASE: sonaUpload
+        # To gate a release for manual inspection instead of publishing it
+        # outright, add: CI_SONATYPE_RELEASE: sonaUpload
+        # ci-release then stages the bundle and stops, and you hit Publish on
+        # the Central Portal yourself. See RELEASING.md.
         PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
         PGP_SECRET: ${{ secrets.PGP_SECRET }}
         SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
