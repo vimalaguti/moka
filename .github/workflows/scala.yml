@@ -30,6 +30,8 @@ jobs:
     - name: Set up sbt
       uses: sbt/setup-sbt@v1
     - name: Check formatting
-      run: sbt "scalafmtCheckAll; scalafmtSbtCheck"
+      # `+`: the scala-2-only sources exist in the source set only when the
+      # current version is 2.13, so a single-version check never sees them.
+      run: sbt "+scalafmtCheckAll; scalafmtSbtCheck"
     - name: Run tests
       run: sbt +testFull

@@ -2,8 +2,8 @@ package io.moka
 
 import Scala2Definitions._
 
-/** Scala 2-only usage: @moka generates or rewrites the companion object,
-  * no placeholder val needed.
+/** Scala 2-only usage: @moka generates or rewrites the companion object, no
+  * placeholder val needed.
   */
 class Scala2MokaSpec extends munit.FunSuite {
 

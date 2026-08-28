@@ -160,6 +160,11 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
 - `.scalafmt.conf` runs the `scala3` dialect globally with a `fileOverride` switching
   `src/{main,test}/scala-2/**` to `scala213source3`. New Scala-2-only sources must live under a
   `scala-2` directory or scalafmt will mis-parse them.
+- **Format-check across versions: `+scalafmtCheckAll`.** A `scala-2` directory is in the source
+  set *only* while the current scalaVersion is 2.13, so plain `scalafmtCheckAll` on the default
+  3.3.8 silently skips `Moka.scala`, `Scala2Definitions.scala` and `Scala2MokaSpec.scala` — and
+  `scalafmtAll` will not reformat them either, which is how they drifted unnoticed. CI uses the
+  `+` form; `scalafmtSbtCheck` needs no `+`.
 - **The Scala 2 macro cannot see sibling types.** `c.typecheck` inside the pre-typer annotation
   macro fails for a type declared as a member of the *same enclosing object or class* as the
   annotated case class — the boundary is the enclosing owner, not the file, and declaration

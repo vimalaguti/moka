@@ -4,9 +4,9 @@ import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
 
 /** Scala 2-only style: @moka generates the companion object (or rewrites an
-  * existing one), so no placeholder val is needed. This is the cleanest way
-  * to use moka on Scala 2, but it does not cross-compile: Scala 3 requires
-  * the explicit companion with `val Fields = generateFields[T]`.
+  * existing one), so no placeholder val is needed. This is the cleanest way to
+  * use moka on Scala 2, but it does not cross-compile: Scala 3 requires the
+  * explicit companion with `val Fields = generateFields[T]`.
   */
 /** Package level, so the annotation macro can resolve it (it cannot see types
   * declared beside the annottee).
