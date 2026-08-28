@@ -35,8 +35,9 @@ package moka {
 
       def extractObjectDestinationName: TermName =
         c.prefix.tree match {
-          case Apply(_, Literal(Constant(name: String)) :: Nil) => TermName(name)
-          case Apply(_, Nil)                                    => TermName("Fields")
+          case Apply(_, Literal(Constant(name: String)) :: Nil) =>
+            TermName(name)
+          case Apply(_, Nil) => TermName("Fields")
           case _ =>
             c.abort(c.enclosingPosition, "Invalid annotation arguments")
         }
@@ -63,15 +64,22 @@ package moka {
 
       val bsonAnnotations = Set("BsonProperty", "bsonField")
 
-      /** Bson name read off the annottee's own params, which are still untyped. */
+      /** Bson name read off the annottee's own params, which are still untyped.
+        */
       def bsonNameFromMods(mods: Modifiers, fallback: String): String =
-        mods.annotations.collect {
-          case Apply(Select(New(Ident(TypeName(ann))), _), Literal(Constant(v: String)) :: Nil)
-              if bsonAnnotations.contains(ann) =>
-            v
-        }.headOption.getOrElse(fallback)
+        mods.annotations
+          .collect {
+            case Apply(
+                  Select(New(Ident(TypeName(ann))), _),
+                  Literal(Constant(v: String)) :: Nil
+                ) if bsonAnnotations.contains(ann) =>
+              v
+          }
+          .headOption
+          .getOrElse(fallback)
 
-      /** Bson name read off a nested type's constructor param, which is typed. */
+      /** Bson name read off a nested type's constructor param, which is typed.
+        */
       def bsonNameFromSymbol(sym: Symbol, fallback: String): String = {
         sym.info // force completion before reading annotations
         sym.annotations
@@ -80,24 +88,27 @@ package moka {
                 if bsonAnnotations.contains(
                   ann.tree.tpe.typeSymbol.name.decodedName.toString
                 ) =>
-              ann.tree.children.collectFirst { case Literal(Constant(v: String)) => v }
+              ann.tree.children.collectFirst {
+                case Literal(Constant(v: String)) => v
+              }
           }
           .flatten
           .getOrElse(fallback)
       }
 
-      /** Case classes are descended into; value classes are not (a value class is
-        * stored flattened, so its path is the outer field's path).
+      /** Case classes are descended into; value classes are not (a value class
+        * is stored flattened, so its path is the outer field's path).
         */
       val optionSym   = typeOf[Option[Any]].typeSymbol
       val iterableTpe = typeOf[Iterable[Any]]
 
       /** `Option` and single-element collections are transparent: MongoDB's dot
-        * notation is the same whether a sub-document is optional, in an array, or
-        * neither. `Map` has two type arguments and is left alone.
+        * notation is the same whether a sub-document is optional, in an array,
+        * or neither. `Map` has two type arguments and is left alone.
         *
-        * Returns the element type and whether a collection was crossed on the way
-        * to it, which is what decides whether the field gets the array operators.
+        * Returns the element type and whether a collection was crossed on the
+        * way to it, which is what decides whether the field gets the array
+        * operators.
         */
       def unwrap(t: Type, sawCollection: Boolean = false): (Type, Boolean) = {
         val d = t.dealias
@@ -135,7 +146,13 @@ package moka {
         val arrayOps =
           if (isArray)
             List(
-              node(TermName("_matched"), tpe, path + ".$", seen, isArray = false),
+              node(
+                TermName("_matched"),
+                tpe,
+                path + ".$",
+                seen,
+                isArray = false
+              ),
               node(TermName("_all"), tpe, path + ".$[]", seen, isArray = false)
             )
           else Nil
@@ -143,7 +160,11 @@ package moka {
         q"object $term extends _root_.io.moka.FieldPath[$pathType] { ..$members }"
       }
 
-      def membersOf(tpe: Type, prefix: String, seen: Set[String]): List[Tree] = {
+      def membersOf(
+          tpe: Type,
+          prefix: String,
+          seen: Set[String]
+      ): List[Tree] = {
         val cls = tpe.dealias.typeSymbol.asClass
         val params =
           cls.primaryConstructor.asMethod.paramLists.headOption.getOrElse(Nil)
@@ -158,7 +179,10 @@ package moka {
         }
       }
 
-      def generateFieldNames(className: TypeName, terms: List[ValDef]): List[Tree] = {
+      def generateFieldNames(
+          className: TypeName,
+          terms: List[ValDef]
+      ): List[Tree] = {
         val selfName = className.decodedName.toString
         terms.map {
           case vd @ q"$mods val $name: $tpt = $rhs" =>
@@ -175,7 +199,8 @@ package moka {
             }
             if (mentionsSelf) leaf(term, path)
             else {
-              val resolved = c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
+              val resolved =
+                c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
               if (resolved.isEmpty)
                 c.abort(
                   vd.pos,
@@ -222,8 +247,10 @@ package moka {
 
         case (classDecl: ClassDef) :: (singleton: ModuleDef) :: Nil =>
           // extract case class and companion object
-          val (className, fields)                  = extractCaseClassParts(classDecl)
-          val (mods, tname, parents, self, stats)  = extractCompanionObjectParts(singleton)
+          val (className, fields) = extractCaseClassParts(classDecl)
+          val (mods, tname, parents, self, stats) = extractCompanionObjectParts(
+            singleton
+          )
 
           // generate the names
           val generatedTerms = generateFieldNames(className, fields.head)
