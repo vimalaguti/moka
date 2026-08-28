@@ -8,6 +8,11 @@ import zio.bson.bsonField
   * to use moka on Scala 2, but it does not cross-compile: Scala 3 requires
   * the explicit companion with `val Fields = generateFields[T]`.
   */
+/** Package level, so the annotation macro can resolve it (it cannot see types
+  * declared beside the annottee).
+  */
+final case class S2Nested(@BsonProperty("z") deep: Int)
+
 object Scala2Definitions {
   @moka
   final case class NoCompanion(a: Int)
@@ -34,5 +39,17 @@ object Scala2Definitions {
   final case class RenamedWithCompanion(a: Int)
   object RenamedWithCompanion {
     val default: RenamedWithCompanion = RenamedWithCompanion(1)
+  }
+
+  @moka
+  final case class NestedNoCompanion(inner: S2Nested, items: List[S2Nested])
+
+  @moka("Paths")
+  final case class NestedRenamed(inner: S2Nested)
+
+  @moka
+  final case class NestedWithCompanion(inner: S2Nested)
+  object NestedWithCompanion {
+    val default: NestedWithCompanion = NestedWithCompanion(S2Nested(0))
   }
 }

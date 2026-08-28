@@ -39,4 +39,11 @@ object Scala3Definitions {
   object Nested {
     val Fields = generateFields[Nested]
   }
+
+  // Scala 3 has no restriction on where the nested type is declared.
+  final case class S3Item(@BsonProperty("q") qty: Int)
+  final case class S3Holder(items: List[S3Item])
+  object S3Holder {
+    val Fields = generateFields[S3Holder]
+  }
 }

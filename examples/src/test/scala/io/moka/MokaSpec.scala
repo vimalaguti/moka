@@ -138,6 +138,42 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(tags, "tags")
   }
 
+  test("the root Fields object has no _path of its own") {
+    assert(compileErrors("Basket.Fields._path").nonEmpty)
+  }
+
+  test("a node's own path is a literal type") {
+    val p: "r" = Level1.Fields.renamed._path
+    assertEquals(p, "r")
+  }
+
+  test("array operators do not nest") {
+    assert(compileErrors("Basket.Fields.items._matched._matched").nonEmpty)
+    assert(compileErrors("Basket.Fields.items._all._all").nonEmpty)
+  }
+
+  test("a cycle reached through a collection terminates as a leaf") {
+    val kids: "kids" = TreeNode.Fields.kids
+    assertEquals(kids, "kids")
+    assertEquals(TreeNode.Fields.name, "name")
+  }
+
+  test("Vector, Set and Seq descend like List") {
+    assertEquals(Bag.Fields.vec.qty, "vec.q")
+    assertEquals(Bag.Fields.set.qty, "set.q")
+    assertEquals(Bag.Fields.seq.qty, "seq.q")
+    assertEquals(Bag.Fields.vec._matched.qty, "vec.$.q")
+  }
+
+  test("array operators are available at every array level") {
+    assertEquals(Grid.Fields.rows.cells.qty, "rows.cells.q")
+    assertEquals(Grid.Fields.rows._matched.cells._all.qty, "rows.$.cells.$[].q")
+  }
+
+  test("without the syntax import a node is not a String") {
+    assert(compileErrors("val s: String = Level1.Fields.renamed").nonEmpty)
+  }
+
   test("bson renamed fields are literal types of the bson name") {
     val abc: "abc" = DiffFields.Fields.a
     assertEquals(abc, "abc")

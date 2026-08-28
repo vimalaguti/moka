@@ -29,6 +29,11 @@ class Scala3MokaSpec extends munit.FunSuite {
     assertEquals(Nested.Fields.inner.x, "inner.x")
   }
 
+  test("array operators work on a type declared beside the annottee") {
+    assertEquals(S3Holder.Fields.items.qty, "items.q")
+    assertEquals(S3Holder.Fields.items._matched.qty, "items.$.q")
+  }
+
   test("generateFields on a non-case class is a compile error") {
     val errors = compileErrors("generateFields[String]")
     assert(errors.contains("requires a case class"), errors)
