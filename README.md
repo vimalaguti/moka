@@ -10,7 +10,7 @@ codebases sharing the same sources.
 ## Installation
 
 ```scala
-libraryDependencies += "io.github.vimalaguti" %% "moka" % "<version>"
+libraryDependencies += "io.github.vimalaguti" %% "moka" % "0.1.0"
 ```
 
 On **Scala 2.13** `@moka` is a macro annotation, so the compiler flag that
