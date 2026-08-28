@@ -119,6 +119,38 @@ path, so recursive models terminate. On Scala 2 there is one extra rule about
 where the nested type may be declared — see
 [cross-compilation](cross.md#nested-types-on-scala-2).
 
+## Using a node as a string
+
+A node is not a `String` — `String` is final, so a value cannot both *be* the
+name `"engine"` and expose `.power`. Its own path is `path`, which is what
+MongoDB APIs want:
+
+```scala mdoc
+Car.Fields.engine.path
+```
+
+If you would rather pass the node directly, one opt-in import — the same line on
+Scala 2 and Scala 3 — allows it:
+
+```scala mdoc
+import io.moka.syntax._
+
+def exists(field: String): String = field
+
+exists(Car.Fields.engine)
+```
+
+On Scala 3 there is a tooling cost: a file that applies this conversion
+currently fails SemanticDB extraction, so Metals loses go-to-definition and
+find-references for that file. Compilation is unaffected, and `.path` avoids it
+entirely.
+
+It is not imported by default on purpose. The conversion only applies where a
+`String` is expected, so in a position where the type is *inferred* it would
+silently infer the node instead — `Map(Car.Fields.engine -> 1)` would build a map
+keyed by the node rather than by `"engine"`. Without the import that is a compile
+error.
+
 ## Use case: MongoDB update
 
 The whole point — no string literals in queries, and renaming a case class

@@ -109,6 +109,12 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(keyed, "keyed")
   }
 
+  test("nodes convert to their path where a String is expected") {
+    import io.moka.syntax._
+    def take(s: String): String = s
+    assertEquals(take(Level1.Fields.renamed), "r")
+  }
+
   test("bson renamed fields are literal types of the bson name") {
     val abc: "abc" = DiffFields.Fields.a
     assertEquals(abc, "abc")

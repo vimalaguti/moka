@@ -101,7 +101,17 @@ suite — the definitions files *are* the compile-time part of the test.
 - **Nested descent.** A field whose type is a case class generates a *node* rather than a leaf
   `String`: on Scala 2 a real nested object extending `FieldPath`, on Scala 3 a recursive
   `Refinement` chain over `FieldPath`. `Fields.a.b` is the literal `"a.b"`; the node's own path
-  is `Fields.a.path`. There is no implicit `FieldPath => String` — `.path` is the API.
+  is `Fields.a.path`. `FieldPath` is a **trait** (`def path: P`) living in shared
+  `macros/src/main/scala/` along with `syntax`; only the two `Moka.scala` macros and Scala 3's
+  `FieldNames`/`PathNode` are version-specific. On Scala 2 the generated objects extend the
+  trait directly and every selection folds to a constant (`ldc`); on Scala 3 they are `PathNode`
+  instances reached through `selectDynamic`, because an expression macro cannot introduce
+  definitions — an object returned from an expression is widened to `Object` and loses its
+  members, so a structural refinement is the only way to expose names. `.path` is the
+  default API; `import io.moka.syntax._` opts into an implicit `FieldPath[P] => P`. That
+  conversion is an `implicit def`, **not** a `given Conversion` — a wildcard import does not pick
+  up `given`s on Scala 3, and Scala 2 cannot parse `import ...given`, so only `implicit def` gives
+  cross-compiled sources one working import line.
   `Option[X]` and single-element `Iterable`s are transparent (same dotted path). Descent stops
   at value classes, at `Map`, and at any type already on the path (cycle guard — removing it
   gives a compiler `StackOverflowError`, on both versions).

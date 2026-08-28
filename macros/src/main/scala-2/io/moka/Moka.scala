@@ -107,8 +107,10 @@ package moka {
       def node(term: TermName, tpe: Type, path: String, seen: Set[String]): Tree = {
         val pathType  = tq"$path"
         val pathValue = q"$path"
-        val members   = membersOf(tpe, path, seen)
-        q"object $term extends _root_.io.moka.FieldPath[$pathType]($pathValue) { ..$members }"
+        val pathMember =
+          ValDef(Modifiers(), TermName("path"), pathType, pathValue)
+        val members = pathMember :: membersOf(tpe, path, seen)
+        q"object $term extends _root_.io.moka.FieldPath[$pathType] { ..$members }"
       }
 
       def membersOf(tpe: Type, prefix: String, seen: Set[String]): List[Tree] = {

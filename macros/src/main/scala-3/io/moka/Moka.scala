@@ -40,7 +40,7 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
     s.isClassDef && s.flags.is(Flags.Case) && !(t.dealias <:< TypeRepr
       .of[AnyVal])
 
-  val fieldPath = Symbol.classSymbol("io.moka.FieldPath")
+  val pathNode  = Symbol.classSymbol("io.moka.PathNode")
   val optionSym = TypeRepr.of[Option[Any]].typeSymbol
 
   /** `Option` and single-element collections are transparent: MongoDB's dot
@@ -79,7 +79,7 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
 
     val base =
       if prefix.isEmpty then TypeRepr.of[FieldNames]
-      else fieldPath.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
+      else pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
     val refined = entries.foldLeft(base) { case (acc, (name, tpe, _)) =>
       Refinement(acc, name, tpe)
     }
@@ -89,7 +89,7 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
     })
     val node =
       if prefix.isEmpty then '{ FieldNames($children.toMap) }
-      else '{ FieldPath(${ Expr(prefix) }, $children.toMap) }
+      else '{ PathNode(${ Expr(prefix) }, $children.toMap) }
     (refined, node)
 
   val (refined, node) = build(rootTpe, "", Set(rootTpe.typeSymbol.fullName))
