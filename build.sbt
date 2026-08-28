@@ -1,5 +1,5 @@
-lazy val scala213Version        = "2.13.16"
-lazy val scala3LtsVersion       = "3.3.5"
+lazy val scala213Version        = "2.13.18"
+lazy val scala3LtsVersion       = "3.3.8"
 lazy val supportedScalaVersions = List(scala213Version, scala3LtsVersion)
 
 ThisBuild / version          := "0.1.0-SNAPSHOT"
@@ -34,11 +34,12 @@ lazy val examples = project
     crossScalaVersions := supportedScalaVersions,
     publish / skip     := true,
     //   scalacOptions += "-Ymacro-debug-lite",
-    libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.2.0")
+    libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.5.1")
       .cross(CrossVersion.for3Use2_13),
-    // 1.0.7 is built on Scala 3.4 and cannot be consumed from the 3.3 LTS compiler
+    // Pinned: 1.0.7 is built on Scala 3.4 and 1.0.8 on 3.5.2, so neither can be
+    // read by the 3.3 LTS compiler (TASTy 28.5 vs the 28.3 it expects).
     libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
-    libraryDependencies += "org.scalameta" %% "munit"    % "1.0.2" % Test
+    libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test
   )
   .dependsOn(macros)
 
