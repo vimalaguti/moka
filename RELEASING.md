@@ -85,16 +85,31 @@ the key's passphrase. From a non-interactive shell or a script it fails with
 gpg: signing failed: Inappropriate ioctl for device
 ```
 
-That is the missing passphrase prompt, not a bad key. Either export a tty so the agent can
-prompt, in an interactive shell:
+That is the missing passphrase prompt, not a bad key: `/usr/bin/pinentry` here is
+`pinentry-curses`, which needs a controlling terminal to draw the prompt on.
+
+`export GPG_TTY=$(tty)` only helps in a **real terminal**. Anywhere without a controlling tty —
+a script, a CI step, an IDE or agent shell — `tty` prints `not a tty`, so the export stores that
+literal string and pinentry fails exactly as before. Check with `tty` before trusting it.
+
+The fix is to unlock the key once from a real terminal:
 
 ```bash
-export GPG_TTY=$(tty)
+echo test | gpg --clearsign > /dev/null    # prompts once
 ```
 
-or cache the passphrase once (`echo test | gpg --clearsign > /dev/null`) and let the agent
-serve it for the rest of its lifetime. CI does not need any of this — sbt-ci-release imports
-`PGP_SECRET` and unlocks it with `PGP_PASSPHRASE` non-interactively.
+gpg-agent then serves the passphrase to any later process — including a non-interactive sbt —
+for `default-cache-ttl` of idle time up to `max-cache-ttl` (see `~/.gnupg/gpg-agent.conf`).
+Confirm with `gpg-connect-agent 'keyinfo --list' /bye`: the field after `P` shows `1` when the
+passphrase is cached and `-` when it is not.
+
+For genuinely headless signing, add `allow-preset-passphrase` to `gpg-agent.conf`, reload the
+agent, and inject it with
+`/usr/lib/gnupg/gpg-preset-passphrase --preset <keygrip of the signing key>`
+(`gpg --list-secret-keys --with-keygrip`).
+
+CI needs none of this — sbt-ci-release imports `PGP_SECRET` and unlocks it with
+`PGP_PASSPHRASE` non-interactively.
 
 ## Doing it by hand
 
