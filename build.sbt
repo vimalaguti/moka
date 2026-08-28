@@ -87,7 +87,11 @@ lazy val docs = project
     publish / skip     := true,
     moduleName         := "moka-docs",
     mdocVariables      := Map("VERSION" -> version.value),
-    git.remoteRepo     := "git@github.com:vimalaguti/moka.git"
+    // Pinned: website/docusaurus.config.js reads ../moka-docs/target/mdoc, and
+    // the default mdocOut follows sbt's target layout, which differs between
+    // sbt 1 and sbt 2 (and embeds the Scala version).
+    mdocOut := (ThisBuild / baseDirectory).value / "moka-docs" / "target" / "mdoc",
+    git.remoteRepo := "git@github.com:vimalaguti/moka.git"
   )
   .dependsOn(examples)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, GhpagesPlugin)
