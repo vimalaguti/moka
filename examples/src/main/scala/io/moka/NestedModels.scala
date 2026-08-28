@@ -53,3 +53,32 @@ final case class Basket(
 object Basket {
   val Fields = generateFields[Basket]
 }
+
+/** A cycle reached through a collection rather than directly. The two versions
+  * catch this by different mechanisms, so parity here is worth pinning.
+  */
+@moka
+final case class TreeNode(name: String, kids: List[TreeNode])
+object TreeNode {
+  val Fields = generateFields[TreeNode]
+}
+
+/** Collection kinds other than List. */
+@moka
+final case class Bag(
+    vec: Vector[BasketItem],
+    set: Set[BasketItem],
+    seq: Seq[BasketItem]
+)
+object Bag {
+  val Fields = generateFields[Bag]
+}
+
+/** An array inside an array: operators must be available at both levels. */
+final case class Row(cells: List[BasketItem])
+
+@moka
+final case class Grid(rows: List[Row])
+object Grid {
+  val Fields = generateFields[Grid]
+}
