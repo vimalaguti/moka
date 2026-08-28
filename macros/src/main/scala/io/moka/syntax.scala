@@ -8,8 +8,9 @@ import scala.language.implicitConversions
   * It is deliberately not in [[FieldPath]]'s companion: Scala 3 reports a
   * feature warning at every site where a conversion is applied, so an
   * always-in-scope conversion would make the default experience differ between
-  * the two Scala versions. `.path` works everywhere without this import.
+  * the two Scala versions. `._path` works everywhere without this import.
   */
 object syntax {
-  implicit def fieldPathToString[P <: String](node: FieldPath[P]): P = node.path
+  implicit def fieldPathToString[P <: String](node: FieldPath[P]): P =
+    node._path
 }

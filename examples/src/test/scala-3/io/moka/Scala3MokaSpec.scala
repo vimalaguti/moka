@@ -25,7 +25,7 @@ class Scala3MokaSpec extends munit.FunSuite {
   }
 
   test("nested case class descends") {
-    assertEquals(Nested.Fields.inner.path, "inner")
+    assertEquals(Nested.Fields.inner._path, "inner")
     assertEquals(Nested.Fields.inner.x, "inner.x")
   }
 

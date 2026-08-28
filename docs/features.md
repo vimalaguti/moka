@@ -92,10 +92,11 @@ Car.Fields.engine.power
 Car.Fields.plate
 ```
 
-A node's own path is `path`, and literal types survive the descent:
+A node's own path is `_path`. Every member moka generates is underscore-prefixed,
+so it can never collide with a field of yours. Literal types survive the descent:
 
 ```scala mdoc
-Car.Fields.engine.path
+Car.Fields.engine._path
 
 val hp: "engine.hp" = Car.Fields.engine.power
 ```
@@ -113,6 +114,29 @@ Garage.Fields.cars.plate
 Garage.Fields.spare.power
 ```
 
+### Array operators
+
+A field holding a *collection* of case classes also exposes MongoDB's array
+operators. `Option` fields do not get them — an optional sub-document is not an
+array:
+
+```scala mdoc
+case class Wheel(@BsonProperty("d") diameter: Int)
+case class Bike(wheels: List[Wheel])
+object Bike {
+  val Fields = generateFields[Bike]
+}
+
+Bike.Fields.wheels.diameter
+Bike.Fields.wheels._matched.diameter
+Bike.Fields.wheels._all.diameter
+```
+
+`_matched` is the positional operator `$` (the first element that matched the
+query) and `_all` is `$[]` (every element). They do not nest — an operator hop is
+not itself an array — and a collection of a non-case-class type, such as
+`List[String]`, stays a plain leaf.
+
 Descent stops at value classes (stored flattened, so the path is the outer
 field's), at `Map` (naming a value needs a key), and at any type already on the
 path, so recursive models terminate. On Scala 2 there is one extra rule about
@@ -126,7 +150,7 @@ name `"engine"` and expose `.power`. Its own path is `path`, which is what
 MongoDB APIs want:
 
 ```scala mdoc
-Car.Fields.engine.path
+Car.Fields.engine._path
 ```
 
 If you would rather pass the node directly, one opt-in import — the same line on
@@ -142,7 +166,7 @@ exists(Car.Fields.engine)
 
 On Scala 3 there is a tooling cost: a file that applies this conversion
 currently fails SemanticDB extraction, so Metals loses go-to-definition and
-find-references for that file. Compilation is unaffected, and `.path` avoids it
+find-references for that file. Compilation is unaffected, and `._path` avoids it
 entirely.
 
 It is not imported by default on purpose. The conversion only applies where a

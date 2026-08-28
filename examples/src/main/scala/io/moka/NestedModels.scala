@@ -40,3 +40,16 @@ final case class Wrapped(
 object Wrapped {
   val Fields = generateFields[Wrapped]
 }
+
+/** Collection fields additionally expose MongoDB's array operators. */
+final case class BasketItem(@BsonProperty("q") qty: Int, note: String)
+
+@moka
+final case class Basket(
+    items: List[BasketItem],
+    maybe: Option[BasketItem],
+    tags: List[String]
+)
+object Basket {
+  val Fields = generateFields[Basket]
+}

@@ -71,7 +71,7 @@ object Car {
 }
 
 Car.Fields.engine.power == "engine.power"
-Car.Fields.engine.path  == "engine"
+Car.Fields.engine._path == "engine"
 ```
 
 `Option` and collections are transparent (`List[Engine]` gives the same path),

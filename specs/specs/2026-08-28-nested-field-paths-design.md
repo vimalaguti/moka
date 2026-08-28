@@ -54,9 +54,16 @@ Rules that must hold:
    additionally lets a node stand in for its own path where a `String` is expected.
    The conversion is never in implicit scope by default.
 9. **Surface** — `generateFields[T]` yields the root, refined with `T`'s members.
-   The root deliberately carries **no** `path` member, so a top-level field named
-   `path` cannot collide with the accessor. `FieldPath` is reachable through the
-   existing single `import io.moka.*`.
+   Every member moka generates is underscore-prefixed (`_path`, `_matched`,
+   `_all`); everything else on a node is one of your fields. The root carries no
+   `_path` at all. `FieldPath` is reachable through the existing single
+   `import io.moka.*`.
+
+10. **Array operators** — a field whose type is a *collection* of a descendable
+    type additionally exposes `_matched` (`$`) and `_all` (`$[]`) as descendable
+    nodes at the modified path. `Option` does not get them, nor does a collection
+    of a non-descendable type, which stays a leaf. They do not nest: an operator
+    hop is not itself an array.
 
 Consequence to absorb: the repo's own `Definitions.scala` declares its fixtures as
 members of `object Definitions`, which rule 7 forbids for nested models. Those
@@ -238,19 +245,27 @@ on Scala 3 and nothing on Scala 2 — still immaterial.
 
 ### Accepted residual risks
 
-- A nested case class with a field literally named `path` collides with the accessor.
+- A field named `_path`, or a collection element field named `_matched` or `_all`,
+  collides with a generated member. The underscore namespace makes this
+  vanishingly unlikely rather than merely unlucky.
   It fails loudly at compile time on both versions (the refinement cannot conform),
   so it is not a correctness hazard. A configurable accessor name is deferred until
   someone hits it.
-- **The conversion breaks SemanticDB extraction on Scala 3.** In any file that
-  applies it to a node, the compiler reports `Internal error in extracting
-  SemanticDB ... Ignoring <field> of symbol class FieldNames` and emits no index
-  for that file — Metals then loses go-to-definition and find-references there.
-  Compilation itself succeeds; it is a warning. Verified by removing the single
-  test that uses the conversion, which makes it disappear. It is a bug in the
-  SemanticDB extractor's handling of a synthetic conversion applied to a deeply
-  refined type, not something moka can fix. Scala 2 is unaffected. This is a
-  further reason the conversion is opt-in rather than always in scope.
+- **The conversion breaks SemanticDB extraction on Scala 3.** A file that
+  *applies* it to a node makes the compiler report `Internal error in extracting
+  SemanticDB ... Ignoring <field> of symbol class FieldNames` and emit no index
+  for that file, so Metals loses go-to-definition and find-references throughout
+  it. Compilation succeeds; it is a warning.
+
+  Scoped precisely: merely importing `io.moka.syntax` costs nothing — a file that
+  imports without applying indexes fine. Only the application triggers it, and it
+  reproduces unchanged on 3.3.8, 3.7.0 and 3.8.3, so it is a live bug in the
+  extractor's handling of a synthetic conversion over a deeply refined type
+  rather than an LTS lag. Scala 2 is unaffected.
+
+  Kept rather than removed on that basis: the cost is opt-in and confined to
+  files that choose it, `._path` avoids it entirely, and an upstream fix would
+  remove the cost without any change here.
 - **Mutually recursive models break the Scala 2 compiler.** `@moka case class A(b: B)`
   with `case class B(back: A)` makes `c.typecheck(B)` force `B`'s info, which
   references `A`, which re-enters `A`'s own in-progress annotation expansion —
