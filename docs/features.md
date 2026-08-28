@@ -75,6 +75,50 @@ Fruit.Fields.color
 Fruit.Fields.weight
 ```
 
+## Nested fields
+
+When a field's type is another case class, its `Fields` member is not a plain
+name but a **path node**: it exposes the nested type's own fields, each carrying
+the full dotted path MongoDB expects.
+
+```scala mdoc
+case class Engine(@BsonProperty("hp") power: Int)
+case class Car(engine: Engine, plate: String)
+object Car {
+  val Fields = generateFields[Car]
+}
+
+Car.Fields.engine.power
+Car.Fields.plate
+```
+
+A node's own path is `path`, and literal types survive the descent:
+
+```scala mdoc
+Car.Fields.engine.path
+
+val hp: "engine.hp" = Car.Fields.engine.power
+```
+
+`Option` and collections are transparent, because MongoDB uses the same dotted
+path whether a sub-document is optional, inside an array, or neither:
+
+```scala mdoc
+case class Garage(cars: List[Car], spare: Option[Engine])
+object Garage {
+  val Fields = generateFields[Garage]
+}
+
+Garage.Fields.cars.plate
+Garage.Fields.spare.power
+```
+
+Descent stops at value classes (stored flattened, so the path is the outer
+field's), at `Map` (naming a value needs a key), and at any type already on the
+path, so recursive models terminate. On Scala 2 there is one extra rule about
+where the nested type may be declared — see
+[cross-compilation](cross.md#nested-types-on-scala-2).
+
 ## Use case: MongoDB update
 
 The whole point — no string literals in queries, and renaming a case class

@@ -21,8 +21,9 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(NestedSimple.Fields.a, "a")
   }
 
-  test("nested case class field") {
-    assertEquals(NestedClass.Fields.a, "a")
+  test("nested case class field descends") {
+    assertEquals(NestedClass.Fields.a.path, "a")
+    assertEquals(NestedClass.Fields.a.a, "a.a")
   }
 
   test("companion object with existing members") {
@@ -66,6 +67,46 @@ class MokaSpec extends munit.FunSuite {
   test("field names are literal types") {
     val a: "a" = ManyFields.Fields.a
     assertEquals(a, "a")
+  }
+
+  test("descent goes three levels deep") {
+    assertEquals(Level1.Fields.renamed.three.deep, "r.three.z")
+    assertEquals(Level1.Fields.renamed.three.path, "r.three")
+  }
+
+  test("bson names apply at every level of a path") {
+    assertEquals(Level1.Fields.renamed.path, "r")
+    assertEquals(Level1.Fields.renamed.c, "r.c")
+    assertEquals(Level1.Fields.plain, "plain")
+  }
+
+  test("nested paths are literal types") {
+    val deep: "r.three.z" = Level1.Fields.renamed.three.deep
+    assertEquals(deep, "r.three.z")
+  }
+
+  test("a directly self-referential field terminates as a leaf") {
+    val child: "child" = SelfRef.Fields.child
+    assertEquals(child, "child")
+    assertEquals(SelfRef.Fields.value, "value")
+  }
+
+  test("Option descends transparently to the same path") {
+    assertEquals(Wrapped.Fields.maybe.path, "maybe")
+    assertEquals(Wrapped.Fields.maybe.c, "maybe.c")
+  }
+
+  test("collections descend transparently to the same path") {
+    assertEquals(Wrapped.Fields.many.deep, "many.z")
+  }
+
+  test("nested wrappers unwrap all the way down") {
+    assertEquals(Wrapped.Fields.nestedOpt.deep, "nestedOpt.z")
+  }
+
+  test("Map fields stay leaves") {
+    val keyed: "keyed" = Wrapped.Fields.keyed
+    assertEquals(keyed, "keyed")
   }
 
   test("bson renamed fields are literal types of the bson name") {

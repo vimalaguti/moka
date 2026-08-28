@@ -57,6 +57,27 @@ object Fruit {
 Fruit.Fields.color == "c"
 ```
 
+## Nested fields
+
+A field whose type is another case class becomes a path node exposing that
+type's fields, each carrying the dotted path MongoDB expects:
+
+```scala
+case class Engine(power: Int)
+@moka
+case class Car(engine: Engine)
+object Car {
+  val Fields = generateFields[Car]
+}
+
+Car.Fields.engine.power == "engine.power"
+Car.Fields.engine.path  == "engine"
+```
+
+`Option` and collections are transparent (`List[Engine]` gives the same path),
+and on Scala 2 the nested type must be declared outside the enclosing object —
+see the [cross-compilation](docs/cross.md) page.
+
 ## Usage idea
 
 When using mongodb, you are required to set the field name when filtering or

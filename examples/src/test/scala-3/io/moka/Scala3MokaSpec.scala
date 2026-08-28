@@ -24,8 +24,9 @@ class Scala3MokaSpec extends munit.FunSuite {
     assertEquals(WithMembers.default, WithMembers(0))
   }
 
-  test("nested case class uses the outer field name") {
-    assertEquals(Nested.Fields.inner, "inner")
+  test("nested case class descends") {
+    assertEquals(Nested.Fields.inner.path, "inner")
+    assertEquals(Nested.Fields.inner.x, "inner.x")
   }
 
   test("generateFields on a non-case class is a compile error") {
