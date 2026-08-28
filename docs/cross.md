@@ -8,7 +8,7 @@ The same source file can compile on Scala 2.13 **and** Scala 3: combine the
 `@moka` annotation with the placeholder val in an explicit companion object.
 
 ```scala mdoc
-import io.moka.*
+import io.moka._
 
 @moka
 case class Fruit(name: String, weight: Double)
@@ -30,6 +30,19 @@ How it works, per version:
 Either way, every call site looks the same (`Fruit.Fields.name`) and has the
 same static type, so shared code — including shared tests — works unchanged
 on both versions.
+
+## Build setup
+
+Only the 2.13 axis needs a flag, and shared sources must use the `_` wildcard
+in imports — `import io.moka.*` is Scala 3 syntax and does not parse on 2.13
+unless the whole project opts into `-Xsource:3`.
+
+```scala
+scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
+  case Some((2, 13)) => Seq("-Ymacro-annotations")
+  case _             => Nil
+})
+```
 
 To rename the generated object in cross-compiled sources, rename the val and
 pass the same name to the annotation (used by Scala 2 only):

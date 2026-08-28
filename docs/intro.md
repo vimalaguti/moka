@@ -11,7 +11,7 @@ don't need hardcoded strings, and a misspelled field name is a compile error
 instead of a silent production bug.
 
 ```scala mdoc
-import io.moka.*
+import io.moka._
 
 case class Apple(color: String)
 object Apple {
@@ -58,8 +58,24 @@ See the [Scala 3](scala3.md), [Scala 2](scala2.md) and
 Add this line to `build.sbt`:
 
 ```scala
-libraryDependencies += "io.moka" %% "moka" % "@VERSION@"
+libraryDependencies += "io.github.vimalaguti" %% "moka" % "@VERSION@"
 ```
+
+On Scala 2.13 `@moka` is a macro annotation, which the compiler only expands
+when told to. Cross-built projects want it applied to the 2.13 axis only:
+
+```scala
+scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
+  case Some((2, 13)) => Seq("-Ymacro-annotations")
+  case _             => Nil
+})
+```
+
+:::note
+Scala 3 needs no compiler flags. If a `Fields` selection fails with
+`not a member of io.moka.FieldsNotGenerated_AddYmacroAnnotations`, the flag
+above is missing.
+:::
 
 :::note
 Not yet published to a public repository — build it locally with

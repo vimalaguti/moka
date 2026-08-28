@@ -7,14 +7,24 @@ import scala.reflect.macros.whitebox
 package object moka {
 
   @compileTimeOnly(
-    "io.moka.generateFields is a placeholder rewritten by @moka: annotate the case class with @moka"
+    "io.moka.generateFields is a placeholder that @moka rewrites. If the case class already carries @moka, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
   )
-  def generateFields[T]: Unit = ()
+  def generateFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
 }
 
 package moka {
 
-  @compileTimeOnly("enable macro paradise to expand macro annotations")
+  /** Declared return type of the [[io.moka.generateFields]] placeholder, and
+    * the only thing a caller can see if `@moka` never ran. Selecting a field on
+    * it fails in the typer, which happens *before* refchecks reports
+    * `@compileTimeOnly`, so the type's own name has to carry the diagnostic —
+    * otherwise the user's first error is an unexplained "not a member of Unit".
+    */
+  sealed trait FieldsNotGenerated_AddYmacroAnnotations
+
+  @compileTimeOnly(
+    "@moka was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
+  )
   class moka(name: String = "Fields") extends StaticAnnotation {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
   }

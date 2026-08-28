@@ -16,7 +16,7 @@ member with the same name whose **value** is the field's name (or its bson
 name, see below). Misspelled names fail at compile time.
 
 ```scala mdoc
-import io.moka.*
+import io.moka._
 
 case class Apple(color: String, ripe: Boolean)
 object Apple {

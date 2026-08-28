@@ -7,12 +7,32 @@ field names fail at compile time.
 Works on **Scala 2.13** and **Scala 3** (3.3 LTS) — including cross-compiled
 codebases sharing the same sources.
 
+## Installation
+
+```scala
+libraryDependencies += "io.github.vimalaguti" %% "moka" % "<version>"
+```
+
+On **Scala 2.13** `@moka` is a macro annotation, so the compiler flag that
+expands those is required:
+
+```scala
+scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
+  case Some((2, 13)) => Seq("-Ymacro-annotations")
+  case _             => Nil
+})
+```
+
+Without it the annotation is silently left in place and every `Fields`
+selection fails with `not a member of io.moka.FieldsNotGenerated_AddYmacroAnnotations`.
+Scala 3 needs no flags.
+
 ## Example
 
 Cross-compiled style (works on both versions):
 
 ```scala
-import io.moka.*
+import io.moka._
 
 @moka
 case class Apple(color: String)
@@ -94,3 +114,7 @@ be declared outside the enclosing object — see the
 When using mongodb, you are required to set the field name when filtering or
 for projections. With this macro you can avoid setting the name manually and
 instead use the `Fields` object.
+
+## License
+
+Apache-2.0. Copyright 2026 Vittorio Malaguti.

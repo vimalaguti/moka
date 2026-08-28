@@ -12,10 +12,36 @@ lazy val supportedScalaVersions =
 /** The subset that produces released artifacts. */
 lazy val publishedScalaVersions = List(scala213Version, scala3LtsVersion)
 
-ThisBuild / version          := "0.1.0-SNAPSHOT"
-ThisBuild / organization     := "io.moka"
-ThisBuild / organizationName := "moka"
+ThisBuild / version := "0.1.0-SNAPSHOT"
+// groupId is the GitHub-verified namespace; the Scala package stays io.moka.
+ThisBuild / organization     := "io.github.vimalaguti"
+ThisBuild / organizationName := "Vittorio Malaguti"
 ThisBuild / scalaVersion     := scala3LtsVersion
+ThisBuild / versionScheme    := Some("early-semver")
+
+// POM metadata. Maven Central rejects a bundle without name, description,
+// url, licenses, scm and developers, so these are not optional.
+ThisBuild / description := "Compile-safe MongoDB field paths for Scala: a macro " +
+  "that turns a case class into a Fields object of its (bson-renamed) field names."
+ThisBuild / homepage := Some(url("https://github.com/vimalaguti/moka"))
+ThisBuild / licenses := Seq(
+  "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")
+)
+ThisBuild / scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/vimalaguti/moka"),
+    "scm:git:https://github.com/vimalaguti/moka.git",
+    "scm:git:git@github.com:vimalaguti/moka.git"
+  )
+)
+ThisBuild / developers := List(
+  Developer(
+    id = "vimalaguti",
+    name = "Vittorio Malaguti",
+    email = "",
+    url = url("https://github.com/vimalaguti")
+  )
+)
 
 lazy val scalacOptionsCommon = Seq(
   Compile / scalacOptions ++= {
@@ -103,9 +129,13 @@ lazy val macros = project
     publish / skip := !publishedScalaVersions.contains(scalaVersion.value),
     libraryDependencies ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {
+        // Needed to *expand* the annotation macro, never at runtime: the
+        // generated code is string constants and FieldPath. Provided keeps it
+        // off every downstream runtime classpath — scalac supplies its own
+        // scala-reflect to the macro classloader.
         case Some((2, 13)) =>
           Seq(
-            "org.scala-lang" % "scala-reflect" % scalaVersion.value
+            "org.scala-lang" % "scala-reflect" % scalaVersion.value % Provided
           )
         case _ => Seq.empty
       }
