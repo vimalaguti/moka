@@ -135,6 +135,17 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
 
 ## Repo-specific gotchas
 
+- **`import io.moka.*` is Scala-3-only, and the test suite cannot catch that.** Every fixture
+  lives in `package io.moka`, so no test writes the import at all, and `examples` sets
+  `-Xsource:3` on 2.13, which would mask it anyway. Docs aimed at 2.13 or cross-compiled
+  users must therefore say `import io.moka._` — verified to compile warning-free on 2.13 and
+  3.3.8. Only `docs/scala3.md` keeps `*`. The only real guard is an external-consumer
+  compile against `+publishLocal`; CI does not do this yet.
+- **Forgetting `-Ymacro-annotations` used to produce `not a member of Unit`.** The
+  `@compileTimeOnly` messages fire at refchecks, so any typer error preempts them. The 2.13
+  placeholder therefore returns `io.moka.FieldsNotGenerated_AddYmacroAnnotations`, whose
+  *name* is the diagnostic — the README and `docs/intro.md` quote that string verbatim, so
+  keep them in sync if it is ever renamed.
 - `.scalafmt.conf` runs the `scala3` dialect globally with a `fileOverride` switching
   `src/{main,test}/scala-2/**` to `scala213source3`. New Scala-2-only sources must live under a
   `scala-2` directory or scalafmt will mis-parse them.
@@ -160,6 +171,14 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
   3.9.0 only because `examples` depends on it, so it carries
   `publish / skip := !publishedScalaVersions.contains(scalaVersion.value)` — `+publish` cannot
   emit a 3.9.0 artifact. Verify with `sbt "++3.9.0" "show macros/publish/skip"` (expects `true`).
-- Publishing is otherwise not set up yet (`version := 0.1.0-SNAPSHOT`, `publish / skip` on every
-  module but `macros`); the intended groupId is `io.github.vimalaguti` with the package staying
-  `io.moka`.
+- **POM metadata is done; the release mechanics are not.** groupId is
+  `io.github.vimalaguti` (the Scala package stays `io.moka`), and `description`, `homepage`,
+  `licenses` (Apache-2.0), `scmInfo`, `developers` and `versionScheme` are set at `ThisBuild`
+  level so `macros/makePom` passes Maven Central's required-fields check. Still missing:
+  `publishTo`, PGP signing, and a configured `releaseProcess` — `sbt-release` is in
+  `plugins.sbt` but unconfigured. `version` is still `0.1.0-SNAPSHOT`.
+- **`scala-reflect` is `Provided` on 2.13, deliberately.** It is needed to *expand* the
+  annotation macro, never at runtime — the generated code is string constants plus
+  `FieldPath`. Verified: a downstream 2.13 project compiles and runs the macro with only
+  `moka_2.13.jar` and `scala-library` on its classpath, because scalac hands its own
+  `scala-reflect` to the macro classloader. Do not "fix" this back to compile scope.
