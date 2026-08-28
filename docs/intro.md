@@ -88,10 +88,7 @@ io.moka.FieldsNotGenerated_AddYmacroAnnotations`. That error name is the
 reminder: the flag is missing.
 :::
 
-:::note
-Not yet published to a public repository — build it locally with
-`sbt +publishLocal` for now.
-:::
+Published to Maven Central, so no extra resolver is needed.
 
 ## Dependencies
 

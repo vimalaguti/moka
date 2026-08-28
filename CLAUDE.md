@@ -210,3 +210,6 @@ changing code:
   `central.sonatype.com` credential. `sbt-ci-release` adds only `publishSigned` (sbt-pgp),
   `publishTo` and dynver — and its `ci-release` calls **`sonaRelease`**, not the
   `sonatypeBundleRelease` its README still documents (verified in the 1.12.1 jar).
+  `release.yml` currently overrides that with `CI_SONATYPE_RELEASE: sonaUpload`, so a tag
+  stages a bundle for manual promotion on the Portal rather than publishing outright —
+  Maven Central releases cannot be withdrawn. See `RELEASING.md`.

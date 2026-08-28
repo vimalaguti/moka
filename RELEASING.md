@@ -48,9 +48,23 @@ git tag -a v0.1.0 -m "moka 0.1.0"
 git push origin v0.1.0
 ```
 
-The workflow then runs `+testFull` and, only if it passes, `ci-release`, which is
-`+publishSigned` followed by `sonaRelease`. Artifacts appear on
-<https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes to a few hours.
+The workflow then runs `+testFull` and, only if it passes, `ci-release`.
+
+**The promotion step is currently gated.** `release.yml` sets
+`CI_SONATYPE_RELEASE: sonaUpload`, so `ci-release` signs the artifacts and uploads the bundle
+but does **not** promote it. Finish by hand:
+
+1. Open <https://central.sonatype.com/publishing/deployments>.
+2. Check the deployment validated — this is where a malformed `PGP_SECRET` or a key the
+   validator dislikes shows up.
+3. Hit **Publish**.
+
+Maven Central is immutable: a released version can never be replaced or withdrawn. Keep the
+gate until a release has gone through once, then delete the `CI_SONATYPE_RELEASE` line and tags
+will publish on their own.
+
+Artifacts appear on <https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes
+to a few hours of promotion.
 
 Afterwards, regenerate the site from the tag so the install snippet shows the released
 version (`mdocVariables` interpolates `@VERSION@` from `version.value`):
