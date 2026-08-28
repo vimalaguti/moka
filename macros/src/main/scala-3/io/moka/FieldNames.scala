@@ -12,7 +12,7 @@ class FieldNames(children: Map[String, Any]) extends Selectable:
   def selectDynamic(name: String): Any = children(name)
 
 /** The Scala 3 counterpart of a generated nested object. */
-class PathNode[P <: String](val path: P, children: Map[String, Any])
+class PathNode[P <: String](val _path: P, children: Map[String, Any])
     extends FieldNames(children),
       FieldPath[P]:
-  override def toString: String = path
+  override def toString: String = _path

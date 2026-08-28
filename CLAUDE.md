@@ -14,11 +14,11 @@ almost every design decision in the repo.
 ## Commands
 
 ```bash
-sbt compile                                     # current scalaVersion only (3.3.5)
+sbt compile                                     # current scalaVersion only (3.3.8 LTS)
 sbt test                                        # ditto
-sbt +test                                       # cross-build both versions — what CI runs
+sbt +test                                       # 2.13.18, 3.3.8 and 3.9.0 — what CI runs
 sbt "examples/testOnly io.moka.MokaSpec"        # single suite (shared tests)
-sbt "++2.13.16" "examples/testOnly io.moka.Scala2MokaSpec"  # 2.13-only suite
+sbt "++2.13.18" "examples/testOnly io.moka.Scala2MokaSpec"  # 2.13-only suite
 sbt "examples/testOnly io.moka.Scala3MokaSpec"             # 3.x-only suite
 sbt scalafmtAll                                 # format
 sbt scalafmtCheckAll scalafmtSbtCheck           # what CI checks
@@ -101,18 +101,24 @@ suite — the definitions files *are* the compile-time part of the test.
 - **Nested descent.** A field whose type is a case class generates a *node* rather than a leaf
   `String`: on Scala 2 a real nested object extending `FieldPath`, on Scala 3 a recursive
   `Refinement` chain over `FieldPath`. `Fields.a.b` is the literal `"a.b"`; the node's own path
-  is `Fields.a.path`. `FieldPath` is a **trait** (`def path: P`) living in shared
+  is `Fields.a._path`. **Every generated member is underscore-prefixed** (`_path`, `_matched`,
+  `_all`); anything without one is the user's own field. `FieldPath` is a **trait**
+  (`def _path: P`) living in shared
   `macros/src/main/scala/` along with `syntax`; only the two `Moka.scala` macros and Scala 3's
   `FieldNames`/`PathNode` are version-specific. On Scala 2 the generated objects extend the
   trait directly and every selection folds to a constant (`ldc`); on Scala 3 they are `PathNode`
   instances reached through `selectDynamic`, because an expression macro cannot introduce
   definitions — an object returned from an expression is widened to `Object` and loses its
-  members, so a structural refinement is the only way to expose names. `.path` is the
-  default API; `import io.moka.syntax._` opts into an implicit `FieldPath[P] => P`. That
+  members, so a structural refinement is the only way to expose names. `._path` is the
+  default API; `import io.moka.syntax._` opts into an implicit `FieldPath[P] => P`. Applying
+  that conversion breaks SemanticDB extraction for the whole file on Scala 3 (a warning, not an
+  error; reproduces on 3.3/3.7/3.8) — importing without applying is free. That
   conversion is an `implicit def`, **not** a `given Conversion` — a wildcard import does not pick
   up `given`s on Scala 3, and Scala 2 cannot parse `import ...given`, so only `implicit def` gives
   cross-compiled sources one working import line.
-  `Option[X]` and single-element `Iterable`s are transparent (same dotted path). Descent stops
+  `Option[X]` and single-element `Iterable`s are transparent (same dotted path), but a
+  *collection* of a descendable type also gets `_matched` (`$`) and `_all` (`$[]`) as descendable
+  nodes — `Option` does not, and the operators do not nest. Descent stops
   at value classes, at `Map`, and at any type already on the path (cycle guard — removing it
   gives a compiler `StackOverflowError`, on both versions).
 - The root `Fields` deliberately has **no** `path` member (`FieldNames` on Scala 3, a plain
@@ -123,7 +129,7 @@ suite — the definitions files *are* the compile-time part of the test.
 `docs/*.md` → mdoc (compiled against `examples`, so snippets are type-checked) →
 `moka-docs/target/mdoc` → Docusaurus in `website/` → gh-pages branch.
 
-mdoc only ever runs on the current `scalaVersion` (3.3.5), so **`docs/scala2.md` must use plain
+mdoc only ever runs on the current `scalaVersion` (3.3.8), so **`docs/scala2.md` must use plain
 ` ```scala ` fences, never ` ```scala mdoc `** — its snippets cannot compile on Scala 3. The
 other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
 
@@ -142,13 +148,18 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
   seems to have no effect, `sbt "++<ver>" macros/clean examples/clean <task>` before concluding
   the logic is wrong.
 - The checked-in `.bloop/` config is **stale** (exported for Scala 3.6.4; the build now targets
-  3.3.5) and holds only one Scala version. Run `sbt bloopInstall` before using the bloop-build
-  skill, and use plain sbt for anything cross-version (`+test`, `++2.13.16 ...`).
+  3.3.8) and holds only one Scala version. Run `sbt bloopInstall` before using the bloop-build
+  skill, and use plain sbt for anything cross-version (`+test`, `++2.13.18 ...`).
 - `.github/copilot-instructions.md` is **out of date**: it refers to a `core` module (now
   `examples`) and `scala-2.13` source dirs (now `scala-2`), and predates the Scala 3 support.
   Prefer this file.
 - `IMPROVEMENTS.md` is an untracked local scratch list of follow-ups; it is not part of the
   build and is marked "do not commit".
-- Publishing is not set up yet (`version := 0.1.0-SNAPSHOT`, `publish / skip` on every module
-  but `macros`); the intended groupId is `io.github.vimalaguti` with the package staying
+- **Cross-built on three Scala versions, published for two.** `supportedScalaVersions` is
+  2.13.18 / 3.3.8 LTS / 3.9.0; `publishedScalaVersions` drops 3.9.0. `macros` has to *build* on
+  3.9.0 only because `examples` depends on it, so it carries
+  `publish / skip := !publishedScalaVersions.contains(scalaVersion.value)` — `+publish` cannot
+  emit a 3.9.0 artifact. Verify with `sbt "++3.9.0" "show macros/publish/skip"` (expects `true`).
+- Publishing is otherwise not set up yet (`version := 0.1.0-SNAPSHOT`, `publish / skip` on every
+  module but `macros`); the intended groupId is `io.github.vimalaguti` with the package staying
   `io.moka`.

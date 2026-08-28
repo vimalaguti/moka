@@ -22,7 +22,7 @@ class MokaSpec extends munit.FunSuite {
   }
 
   test("nested case class field descends") {
-    assertEquals(NestedClass.Fields.a.path, "a")
+    assertEquals(NestedClass.Fields.a._path, "a")
     assertEquals(NestedClass.Fields.a.a, "a.a")
   }
 
@@ -71,11 +71,11 @@ class MokaSpec extends munit.FunSuite {
 
   test("descent goes three levels deep") {
     assertEquals(Level1.Fields.renamed.three.deep, "r.three.z")
-    assertEquals(Level1.Fields.renamed.three.path, "r.three")
+    assertEquals(Level1.Fields.renamed.three._path, "r.three")
   }
 
   test("bson names apply at every level of a path") {
-    assertEquals(Level1.Fields.renamed.path, "r")
+    assertEquals(Level1.Fields.renamed._path, "r")
     assertEquals(Level1.Fields.renamed.c, "r.c")
     assertEquals(Level1.Fields.plain, "plain")
   }
@@ -92,7 +92,7 @@ class MokaSpec extends munit.FunSuite {
   }
 
   test("Option descends transparently to the same path") {
-    assertEquals(Wrapped.Fields.maybe.path, "maybe")
+    assertEquals(Wrapped.Fields.maybe._path, "maybe")
     assertEquals(Wrapped.Fields.maybe.c, "maybe.c")
   }
 
@@ -113,6 +113,29 @@ class MokaSpec extends munit.FunSuite {
     import io.moka.syntax._
     def take(s: String): String = s
     assertEquals(take(Level1.Fields.renamed), "r")
+  }
+
+  test("collection fields expose the positional operators") {
+    assertEquals(Basket.Fields.items.qty, "items.q")
+    assertEquals(Basket.Fields.items._matched.qty, "items.$.q")
+    assertEquals(Basket.Fields.items._all.qty, "items.$[].q")
+  }
+
+  test("array operator paths are literal types") {
+    val matched: "items.$.q"  = Basket.Fields.items._matched.qty
+    val all: "items.$[].note" = Basket.Fields.items._all.note
+    assertEquals(matched, "items.$.q")
+    assertEquals(all, "items.$[].note")
+  }
+
+  test("Option fields do not get array operators") {
+    assertEquals(Basket.Fields.maybe.qty, "maybe.q")
+    assert(compileErrors("Basket.Fields.maybe._matched").nonEmpty)
+  }
+
+  test("collections of non-case-class types stay leaves") {
+    val tags: "tags" = Basket.Fields.tags
+    assertEquals(tags, "tags")
   }
 
   test("bson renamed fields are literal types of the bson name") {

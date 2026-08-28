@@ -1,6 +1,16 @@
-lazy val scala213Version        = "2.13.18"
-lazy val scala3LtsVersion       = "3.3.8"
-lazy val supportedScalaVersions = List(scala213Version, scala3LtsVersion)
+lazy val scala213Version  = "2.13.18"
+lazy val scala3LtsVersion = "3.3.8"
+// Latest mainline. Cross-built so tests and examples catch breakage early, but
+// never published: `macros` has to build here only because `examples` depends
+// on it.
+lazy val scala3NextVersion = "3.9.0"
+
+/** Everything the build compiles. */
+lazy val supportedScalaVersions =
+  List(scala213Version, scala3LtsVersion, scala3NextVersion)
+
+/** The subset that produces released artifacts. */
+lazy val publishedScalaVersions = List(scala213Version, scala3LtsVersion)
 
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "io.moka"
@@ -69,8 +79,8 @@ lazy val bench = project
   .dependsOn(macros)
 
 /** Runtime benchmark: how much does Scala 3's selectDynamic chain actually cost
-  * once the JIT has had a look? Not aggregated by `root`.
-  * Run with: sbt "benchJmh/Jmh/run -f1 .*PathBenchmark.*"
+  * once the JIT has had a look? Not aggregated by `root`. Run with: sbt
+  * "benchJmh/Jmh/run -f1 .*PathBenchmark.*"
   */
 lazy val benchJmh = project
   .in(file("bench-jmh"))
@@ -88,6 +98,9 @@ lazy val macros = project
   .settings(
     crossScalaVersions := supportedScalaVersions,
     name               := "moka",
+    // Built on every supported version, released only on the published ones,
+    // so `+publish` cannot produce an artifact we do not intend to support.
+    publish / skip := !publishedScalaVersions.contains(scalaVersion.value),
     libraryDependencies ++= {
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, 13)) =>

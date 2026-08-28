@@ -47,13 +47,14 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
     * notation is the same whether a sub-document is optional, in an array, or
     * neither. `Map` has two type arguments and is left alone.
     */
-  def elementType(t: TypeRepr): TypeRepr =
+  def unwrap(t: TypeRepr, sawCollection: Boolean = false): (TypeRepr, Boolean) =
     val d = t.dealias
     d match
-      case AppliedType(_, List(arg))
-          if d.typeSymbol == optionSym || d <:< TypeRepr.of[Iterable[Any]] =>
-        elementType(arg)
-      case _ => d
+      case AppliedType(_, List(arg)) if d.typeSymbol == optionSym =>
+        unwrap(arg, sawCollection)
+      case AppliedType(_, List(arg)) if d <:< TypeRepr.of[Iterable[Any]] =>
+        unwrap(arg, true)
+      case _ => (d, sawCollection)
 
   /** Returns the refined type of the node addressing `prefix`, paired with the
     * expression building it. `prefix` is empty only for the root.
@@ -61,30 +62,44 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
   def build(
       tpe: TypeRepr,
       prefix: String,
-      seen: Set[String]
+      seen: Set[String],
+      isArray: Boolean
   ): (TypeRepr, Expr[Any]) =
     val owner = tpe.dealias.typeSymbol
     val entries = owner.caseFields.map { field =>
       val path =
         if prefix.isEmpty then bsonName(owner, field)
         else prefix + "." + bsonName(owner, field)
-      val fieldTpe = elementType(tpe.dealias.memberType(field))
-      val key      = fieldTpe.typeSymbol.fullName
+      val (fieldTpe, fieldIsArray) = unwrap(tpe.dealias.memberType(field))
+      val key                      = fieldTpe.typeSymbol.fullName
       if isDescendable(fieldTpe) && !seen.contains(key) then
-        val (childTpe, childExpr) = build(fieldTpe, path, seen + key)
+        val (childTpe, childExpr) =
+          build(fieldTpe, path, seen + key, fieldIsArray)
         (field.name, childTpe, childExpr)
       else
         (field.name, ConstantType(StringConstant(path)), Expr(path): Expr[Any])
     }
 
+    // MongoDB's array operators. Neither is itself an array, so they do not
+    // nest further.
+    val arrayOps =
+      if isArray then
+        List("_matched" -> (prefix + ".$"), "_all" -> (prefix + ".$[]")).map {
+          (name, opPath) =>
+            val (opTpe, opExpr) = build(tpe, opPath, seen, false)
+            (name, opTpe, opExpr)
+        }
+      else Nil
+    val members = entries ++ arrayOps
+
     val base =
       if prefix.isEmpty then TypeRepr.of[FieldNames]
       else pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
-    val refined = entries.foldLeft(base) { case (acc, (name, tpe, _)) =>
+    val refined = members.foldLeft(base) { case (acc, (name, tpe, _)) =>
       Refinement(acc, name, tpe)
     }
 
-    val children = Expr.ofList(entries.map { case (name, _, value) =>
+    val children = Expr.ofList(members.map { case (name, _, value) =>
       '{ (${ Expr(name) }, $value) }
     })
     val node =
@@ -92,7 +107,8 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
       else '{ PathNode(${ Expr(prefix) }, $children.toMap) }
     (refined, node)
 
-  val (refined, node) = build(rootTpe, "", Set(rootTpe.typeSymbol.fullName))
+  val (refined, node) =
+    build(rootTpe, "", Set(rootTpe.typeSymbol.fullName), isArray = false)
   refined.asType match
     case '[t] =>
       '{ ${ node.asExprOf[FieldNames] }.asInstanceOf[t & FieldNames] }

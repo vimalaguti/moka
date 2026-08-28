@@ -85,12 +85,17 @@ package moka {
       /** `Option` and single-element collections are transparent: MongoDB's dot
         * notation is the same whether a sub-document is optional, in an array, or
         * neither. `Map` has two type arguments and is left alone.
+        *
+        * Returns the element type and whether a collection was crossed on the way
+        * to it, which is what decides whether the field gets the array operators.
         */
-      def elementType(t: Type): Type = {
+      def unwrap(t: Type, sawCollection: Boolean = false): (Type, Boolean) = {
         val d = t.dealias
-        if (d.typeArgs.size == 1 && (d.typeSymbol == optionSym || d <:< iterableTpe))
-          elementType(d.typeArgs.head)
-        else d
+        if (d.typeArgs.size == 1 && d.typeSymbol == optionSym)
+          unwrap(d.typeArgs.head, sawCollection)
+        else if (d.typeArgs.size == 1 && d <:< iterableTpe)
+          unwrap(d.typeArgs.head, true)
+        else (d, sawCollection)
       }
 
       def isDescendable(t: Type): Boolean = {
@@ -104,12 +109,27 @@ package moka {
       def leaf(term: TermName, path: String): Tree =
         ValDef(Modifiers(), term, tq"$path", q"$path")
 
-      def node(term: TermName, tpe: Type, path: String, seen: Set[String]): Tree = {
+      def node(
+          term: TermName,
+          tpe: Type,
+          path: String,
+          seen: Set[String],
+          isArray: Boolean
+      ): Tree = {
         val pathType  = tq"$path"
         val pathValue = q"$path"
         val pathMember =
-          ValDef(Modifiers(), TermName("path"), pathType, pathValue)
-        val members = pathMember :: membersOf(tpe, path, seen)
+          ValDef(Modifiers(), TermName("_path"), pathType, pathValue)
+        // MongoDB's array operators. Neither is itself an array, so they do not
+        // nest further.
+        val arrayOps =
+          if (isArray)
+            List(
+              node(TermName("_matched"), tpe, path + ".$", seen, isArray = false),
+              node(TermName("_all"), tpe, path + ".$[]", seen, isArray = false)
+            )
+          else Nil
+        val members = pathMember :: (membersOf(tpe, path, seen) ::: arrayOps)
         q"object $term extends _root_.io.moka.FieldPath[$pathType] { ..$members }"
       }
 
@@ -120,10 +140,10 @@ package moka {
         params.map { p =>
           val fieldName = p.name.decodedName.toString
           val path      = pathOf(prefix, bsonNameFromSymbol(p, fieldName))
-          val fieldTpe  = elementType(p.typeSignatureIn(tpe.dealias))
-          val key       = fieldTpe.typeSymbol.fullName
+          val (fieldTpe, isArray) = unwrap(p.typeSignatureIn(tpe.dealias))
+          val key                 = fieldTpe.typeSymbol.fullName
           if (isDescendable(fieldTpe) && !seen.contains(key))
-            node(TermName(fieldName), fieldTpe, path, seen + key)
+            node(TermName(fieldName), fieldTpe, path, seen + key, isArray)
           else leaf(TermName(fieldName), path)
         }
       }
@@ -154,9 +174,9 @@ package moka {
                     s"same enclosing object or class as the annotated case class is invisible to it. Move '$tpt' to " +
                     "package level or into another file."
                 )
-              val ft = elementType(resolved.tpe)
+              val (ft, isArray) = unwrap(resolved.tpe)
               if (isDescendable(ft))
-                node(term, ft, path, Set(ft.typeSymbol.fullName))
+                node(term, ft, path, Set(ft.typeSymbol.fullName), isArray)
               else leaf(term, path)
             }
           case term =>
