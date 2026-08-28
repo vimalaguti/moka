@@ -25,6 +25,20 @@ Apple.Fields.color
 Apple.Fields.colour // typo -> compile error
 ```
 
+Fields inside sub-documents carry their full dotted path, and MongoDB's array
+operators are generated too:
+
+```scala mdoc
+case class Engine(power: Int)
+case class Car(engine: Engine, wheels: List[Engine])
+object Car {
+  val Fields = generateFields[Car]
+}
+
+Car.Fields.engine.power
+Car.Fields.wheels._matched.power
+```
+
 Head over to [Features](features.md) for what the generated `Fields` object
 can do.
 

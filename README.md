@@ -74,9 +74,20 @@ Car.Fields.engine.power == "engine.power"
 Car.Fields.engine._path == "engine"
 ```
 
-`Option` and collections are transparent (`List[Engine]` gives the same path),
-and on Scala 2 the nested type must be declared outside the enclosing object —
-see the [cross-compilation](docs/cross.md) page.
+`Option` and collections are transparent (`List[Engine]` gives the same path).
+A collection of case classes also exposes MongoDB's array operators:
+
+```scala
+case class Bike(wheels: List[Engine])
+
+Bike.Fields.wheels._matched.power == "wheels.$.power"   // positional $
+Bike.Fields.wheels._all.power     == "wheels.$[].power" // $[]
+```
+
+Every generated member starts with an underscore (`_path`, `_matched`, `_all`),
+so it can never collide with a field of your own. On Scala 2 the nested type must
+be declared outside the enclosing object — see the
+[cross-compilation](docs/cross.md) page.
 
 ## Usage idea
 
