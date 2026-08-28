@@ -51,27 +51,114 @@ package moka {
           case _ => c.abort(c.enclosingPosition, "Invalid class " + classDecl)
         }
 
-      def generateFieldNames(terms: List[ValDef]) = {
+      val bsonAnnotations = Set("BsonProperty", "bsonField")
+
+      /** Bson name read off the annottee's own params, which are still untyped. */
+      def bsonNameFromMods(mods: Modifiers, fallback: String): String =
+        mods.annotations.collect {
+          case Apply(Select(New(Ident(TypeName(ann))), _), Literal(Constant(v: String)) :: Nil)
+              if bsonAnnotations.contains(ann) =>
+            v
+        }.headOption.getOrElse(fallback)
+
+      /** Bson name read off a nested type's constructor param, which is typed. */
+      def bsonNameFromSymbol(sym: Symbol, fallback: String): String = {
+        sym.info // force completion before reading annotations
+        sym.annotations
+          .collectFirst {
+            case ann
+                if bsonAnnotations.contains(
+                  ann.tree.tpe.typeSymbol.name.decodedName.toString
+                ) =>
+              ann.tree.children.collectFirst { case Literal(Constant(v: String)) => v }
+          }
+          .flatten
+          .getOrElse(fallback)
+      }
+
+      /** Case classes are descended into; value classes are not (a value class is
+        * stored flattened, so its path is the outer field's path).
+        */
+      val optionSym   = typeOf[Option[Any]].typeSymbol
+      val iterableTpe = typeOf[Iterable[Any]]
+
+      /** `Option` and single-element collections are transparent: MongoDB's dot
+        * notation is the same whether a sub-document is optional, in an array, or
+        * neither. `Map` has two type arguments and is left alone.
+        */
+      def elementType(t: Type): Type = {
+        val d = t.dealias
+        if (d.typeArgs.size == 1 && (d.typeSymbol == optionSym || d <:< iterableTpe))
+          elementType(d.typeArgs.head)
+        else d
+      }
+
+      def isDescendable(t: Type): Boolean = {
+        val s = t.dealias.typeSymbol
+        s.isClass && s.asClass.isCaseClass && !(t.dealias <:< typeOf[AnyVal])
+      }
+
+      def pathOf(prefix: String, name: String): String =
+        if (prefix.isEmpty) name else prefix + "." + name
+
+      def leaf(term: TermName, path: String): Tree =
+        ValDef(Modifiers(), term, tq"$path", q"$path")
+
+      def node(term: TermName, tpe: Type, path: String, seen: Set[String]): Tree = {
+        val pathType  = tq"$path"
+        val pathValue = q"$path"
+        val members   = membersOf(tpe, path, seen)
+        q"object $term extends _root_.io.moka.FieldPath[$pathType]($pathValue) { ..$members }"
+      }
+
+      def membersOf(tpe: Type, prefix: String, seen: Set[String]): List[Tree] = {
+        val cls = tpe.dealias.typeSymbol.asClass
+        val params =
+          cls.primaryConstructor.asMethod.paramLists.headOption.getOrElse(Nil)
+        params.map { p =>
+          val fieldName = p.name.decodedName.toString
+          val path      = pathOf(prefix, bsonNameFromSymbol(p, fieldName))
+          val fieldTpe  = elementType(p.typeSignatureIn(tpe.dealias))
+          val key       = fieldTpe.typeSymbol.fullName
+          if (isDescendable(fieldTpe) && !seen.contains(key))
+            node(TermName(fieldName), fieldTpe, path, seen + key)
+          else leaf(TermName(fieldName), path)
+        }
+      }
+
+      def generateFieldNames(className: TypeName, terms: List[ValDef]): List[Tree] = {
+        val selfName = className.decodedName.toString
         terms.map {
-          case q"$mods val $name: $tpt = $rhs" =>
-            val annotationName = mods.annotations.collect {
-              case Apply(Select((New(Ident(TypeName("BsonProperty"))), _)), Literal(Constant(annName: String)) :: Nil) =>
-                Some(annName)
-              case Apply(Select((New(Ident(TypeName("bsonField"))), _)), Literal(Constant(annName: String)) :: Nil) =>
-                Some(annName)
-              case _ => None
-            }.flatten.headOption
-
-            val termName = TermName(name.decodedName.toString())
-            val bsonName = annotationName.getOrElse(name.decodedName.toString())
-            val value    = q"${bsonName}"
-            val tpe      = tq"${bsonName}"
-
-            val definition = ValDef(Modifiers(), termName, tpe, value)
-
-            definition
+          case vd @ q"$mods val $name: $tpt = $rhs" =>
+            val fieldName = name.decodedName.toString
+            val path      = bsonNameFromMods(mods, fieldName)
+            val term      = TermName(fieldName)
+            // Typechecking a type that mentions the annottee would re-enter this
+            // very annotation expansion, so a self-reference is recognised
+            // syntactically and terminates as a leaf.
+            val mentionsSelf = tpt.exists {
+              case Ident(n)     => n.decodedName.toString == selfName
+              case Select(_, n) => n.decodedName.toString == selfName
+              case _            => false
+            }
+            if (mentionsSelf) leaf(term, path)
+            else {
+              val resolved = c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
+              if (resolved.isEmpty)
+                c.abort(
+                  vd.pos,
+                  s"moka cannot resolve type '$tpt' of field '$fieldName' while expanding @moka on $selfName. " +
+                    "On Scala 2 the annotation macro runs before the typer, so a type declared as a member of the " +
+                    s"same enclosing object or class as the annotated case class is invisible to it. Move '$tpt' to " +
+                    "package level or into another file."
+                )
+              val ft = elementType(resolved.tpe)
+              if (isDescendable(ft))
+                node(term, ft, path, Set(ft.typeSymbol.fullName))
+              else leaf(term, path)
+            }
           case term =>
-            c.abort(c.enclosingPosition, "Invalid field: " + term.name)
+            c.abort(c.enclosingPosition, "Invalid field: " + term)
         }
       }
 
@@ -86,7 +173,7 @@ package moka {
           val (className, fields) = extractCaseClassParts(classDecl)
 
           // generate the names
-          val generatedTerms = generateFieldNames(fields.head)
+          val generatedTerms = generateFieldNames(className, fields.head)
 
           // generate Fields object
           val objectName   = extractObjectDestinationName
@@ -107,7 +194,7 @@ package moka {
           val (mods, tname, parents, self, stats)  = extractCompanionObjectParts(singleton)
 
           // generate the names
-          val generatedTerms = generateFieldNames(fields.head)
+          val generatedTerms = generateFieldNames(className, fields.head)
           val objectName     = extractObjectDestinationName
 
           // replace placeholder vals (val X = generateFields[T]) with the

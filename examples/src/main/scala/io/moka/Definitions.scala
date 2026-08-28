@@ -3,16 +3,23 @@ package io.moka
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
 
+/** Types that appear as the *type of a field* in another case class live at
+  * package level rather than inside `Definitions`. See
+  * `specs/specs/2026-08-28-nested-field-paths-design.md`.
+  */
+@moka
+final case class OneField(a: Int)
+object OneField {
+  val Fields = generateFields[OneField]
+}
+
+case class A(value: Int) extends AnyVal
+
 object Definitions {
   @moka
   final case class NoFields()
   object NoFields {
     val Fields = generateFields[NoFields]
-  }
-  @moka
-  final case class OneField(a: Int)
-  object OneField {
-    val Fields = generateFields[OneField]
   }
   @moka
   final case class ManyFields(a: Int, b: Int)
@@ -26,7 +33,6 @@ object Definitions {
   object DiffFields {
     val Fields = generateFields[DiffFields]
   }
-  case class A(value: Int) extends AnyVal
   @moka
   final case class NestedSimple(a: A)
   object NestedSimple {

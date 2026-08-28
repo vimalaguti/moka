@@ -38,6 +38,18 @@ class Scala2MokaSpec extends munit.FunSuite {
     assertEquals(RenamedWithCompanion.default.a, 1)
   }
 
+  test("a nested type declared beside the annottee is rejected") {
+    val errors = compileErrors("""
+      object Local {
+        case class Inner(b: Int)
+        @moka case class Outer(a: Inner)
+        object Outer { val Fields = generateFields[Outer] }
+      }
+    """)
+    assert(errors.contains("cannot resolve type"), errors)
+    assert(errors.contains("same enclosing object"), errors)
+  }
+
   // Note: generateFields without @moka is rejected by @compileTimeOnly
   // ("placeholder rewritten by @moka"). Not tested via munit compileErrors:
   // on Scala 2 it typechecks without the refchecks phase that enforces
