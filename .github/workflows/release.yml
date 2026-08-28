@@ -1,0 +1,45 @@
+# Tag-driven release to Maven Central via sbt-ci-release.
+#
+# `ci-release` no-ops with a clear message when the secrets are absent, so a
+# fork or a tag pushed without them cannot half-publish anything.
+name: Release
+
+on:
+  push:
+    tags: [ "v*" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        # sbt-dynver derives the version from `git describe`. A tag checkout can
+        # describe itself at depth 1, but a branch checkout cannot see a tag even
+        # two commits back ("No names found"), which would silently publish
+        # 0.0.0+n-<sha>. Full history is the only safe setting.
+        fetch-depth: 0
+    - name: Set up JDK 21
+      uses: actions/setup-java@v5
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'sbt'
+    - name: Set up sbt
+      uses: sbt/setup-sbt@v1
+    # One sbt invocation: if the suite fails, ci-release never runs.
+    - name: Test and release
+      run: sbt "+testFull; ci-release"
+      env:
+        PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+        PGP_SECRET: ${{ secrets.PGP_SECRET }}
+        SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+        SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}

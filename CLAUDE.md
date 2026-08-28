@@ -193,8 +193,13 @@ other pages use `mdoc` (and `mdoc:fail` for the typo-doesn't-compile demo).
   `sonaRelease` are core tasks, so there is deliberately no `sbt-sonatype` here, and
   `SONATYPE_USERNAME`/`SONATYPE_PASSWORD` are turned into a `central.sonatype.com` credential
   automatically. `sbt-ci-release` (which replaced `sbt-release`) adds only the missing pieces:
-  `publishSigned` via sbt-pgp, `publishTo`, and `version` via sbt-dynver. Outstanding: generate
-  a PGP key, and add the tag-triggered release workflow.
+  `publishSigned` via sbt-pgp, `publishTo`, and `version` via sbt-dynver — and its `ci-release`
+  runs `+publishSigned` then **`sonaRelease`** (verified in the 1.12.1 jar; the plugin's README
+  still documents the old `sonatypeBundleRelease`, which does not exist here).
+  `.github/workflows/release.yml` triggers on `v*` tags; the procedure and the rules that bite
+  are in **`RELEASING.md`**. Outstanding: a PGP key and the four GitHub secrets — until they
+  exist `ci-release` prints `No access to secret variables, doing nothing` and exits 0, so a
+  green release run is not proof of a release.
 - **`version` is derived, not declared.** sbt-dynver reads it from git: a **`v`-prefixed** tag
   (`v0.1.0` → `0.1.0`; a bare `0.1.0` tag is ignored) on a **clean tracked tree**, otherwise
   `<tag>+<n>-<sha>-SNAPSHOT`. `publishTo` follows: `localStaging` for a release, the
