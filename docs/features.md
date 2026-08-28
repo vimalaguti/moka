@@ -75,6 +75,11 @@ Fruit.Fields.color
 Fruit.Fields.weight
 ```
 
+moka does **not** depend on either library: it matches both annotations by
+simple name, so whichever one is already on your classpath is the one that
+works, and moka itself adds no dependency of its own. See
+[Dependencies](intro.md#dependencies).
+
 ## Nested fields
 
 When a field's type is another case class, its `Fields` member is not a plain
