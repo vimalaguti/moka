@@ -12,19 +12,45 @@ sbt-dynver reads it from the tag.
 `io.github.vimalaguti` is associated with the account (GitHub login associates
 `io.github.<user>` automatically). It matches `ThisBuild / organization` in `build.sbt`.
 
-### 2. PGP key — outstanding
+### 2. PGP key — done
+
+An **ed25519** key signs the releases and the Central Portal accepts it (0.1.0 validated on
+2026-08-28), so there is no need to prefer RSA. Distributing the public key to a keyserver is
+mandatory — Central fetches it to verify the signatures — and propagation is not instant, so a
+404 right after `--send-keys` means wait, not fail.
+
+To rotate or regenerate:
 
 ```bash
-gpg --gen-key                      # use a passphrase; keep it for PGP_PASSPHRASE
+gpg --gen-key                       # use a passphrase; it becomes PGP_PASSPHRASE
 gpg --list-keys --keyid-format LONG # note the long key id
 gpg --keyserver keyserver.ubuntu.com --send-keys <LONG_ID>
 ```
 
-Export it for CI as a **single line** of base64:
+### 2b. Exporting `PGP_SECRET` without corrupting it
+
+`ci-release` runs `base64 --decode | gpg --batch --import`, and GNU base64 rejects **any**
+character outside its alphabet with `base64: invalid input` — a single stray `\r` is enough.
+That is what a Windows-clipboard round-trip (`clip.exe`) adds, and it fails the release at
+`setupGpg` before anything is signed.
+
+Export, **verify the exact bytes**, then set the secret without a clipboard:
 
 ```bash
-gpg --armor --export-secret-keys <LONG_ID> | base64 -w0
+umask 077
+gpg --armor --export-secret-keys <LONG_ID> | base64 -w0 | tr -d '\r\n' > /tmp/pgp.b64
+
+wc -c < /tmp/pgp.b64                            # a few thousand bytes, never 0
+tr -d 'A-Za-z0-9+/=' < /tmp/pgp.b64 | wc -c     # MUST be 0 — this is the check that matters
+base64 --decode < /tmp/pgp.b64 | gpg --show-keys | head -3   # must print your fingerprint
+
+gh secret set PGP_SECRET --repo vimalaguti/moka < /tmp/pgp.b64
+shred -u /tmp/pgp.b64
 ```
+
+The middle line counts characters `base64 --decode` would choke on; the third replays CI's own
+pipeline locally. Pasting into the GitHub web UI works too, but only if the value reached the
+clipboard unmangled — the checks above are what tell you.
 
 ### 3. GitHub secrets
 
@@ -48,23 +74,22 @@ git tag -a v0.1.0 -m "moka 0.1.0"
 git push origin v0.1.0
 ```
 
-The workflow then runs `+testFull` and, only if it passes, `ci-release`.
+The workflow runs `+testFull` and, only if it passes, `ci-release` — which signs with the
+imported key, stages a bundle, uploads it to the Central Portal and promotes it. Artifacts
+appear on <https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes to a few
+hours.
 
-**The promotion step is currently gated.** `release.yml` sets
-`CI_SONATYPE_RELEASE: sonaUpload`, so `ci-release` signs the artifacts and uploads the bundle
-but does **not** promote it. Finish by hand:
+**Maven Central is immutable**: a published version can never be replaced or withdrawn. To
+inspect a bundle before it goes public, add to the workflow's `env`:
 
-1. Open <https://central.sonatype.com/publishing/deployments>.
-2. Check the deployment validated — this is where a malformed `PGP_SECRET` or a key the
-   validator dislikes shows up.
-3. Hit **Publish**.
+```yaml
+CI_SONATYPE_RELEASE: sonaUpload
+```
 
-Maven Central is immutable: a released version can never be replaced or withdrawn. Keep the
-gate until a release has gone through once, then delete the `CI_SONATYPE_RELEASE` line and tags
-will publish on their own.
-
-Artifacts appear on <https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes
-to a few hours of promotion.
+`ci-release` then stops after upload; open
+<https://central.sonatype.com/publishing/deployments>, confirm the deployment reads
+`VALIDATED`, and hit **Publish**. An unpublished deployment can be dropped freely, so this is
+the safe way to try a new key or a changed POM.
 
 Afterwards, regenerate the site from the tag so the install snippet shows the released
 version (`mdocVariables` interpolates `@VERSION@` from `version.value`):
