@@ -12,7 +12,8 @@ lazy val supportedScalaVersions =
 /** The subset that produces released artifacts. */
 lazy val publishedScalaVersions = List(scala213Version, scala3LtsVersion)
 
-ThisBuild / version := "0.1.0-SNAPSHOT"
+// version comes from sbt-dynver: a `vX.Y.Z` tag gives X.Y.Z, anything else
+// gives <last tag>+<n>-<sha>-SNAPSHOT. Do not set it here.
 // groupId is the GitHub-verified namespace; the Scala package stays io.moka.
 ThisBuild / organization     := "io.github.vimalaguti"
 ThisBuild / organizationName := "Vittorio Malaguti"
@@ -24,9 +25,7 @@ ThisBuild / versionScheme    := Some("early-semver")
 ThisBuild / description := "Compile-safe MongoDB field paths for Scala: a macro " +
   "that turns a case class into a Fields object of its (bson-renamed) field names."
 ThisBuild / homepage := Some(url("https://github.com/vimalaguti/moka"))
-ThisBuild / licenses := Seq(
-  "Apache-2.0" -> url("https://www.apache.org/licenses/LICENSE-2.0")
-)
+ThisBuild / licenses := List(License.Apache2)
 ThisBuild / scmInfo := Some(
   ScmInfo(
     url("https://github.com/vimalaguti/moka"),
@@ -34,6 +33,8 @@ ThisBuild / scmInfo := Some(
     "scm:git:git@github.com:vimalaguti/moka.git"
   )
 )
+// Keep every repository other than Central out of the published POM.
+ThisBuild / pomIncludeRepository := { _ => false }
 ThisBuild / developers := List(
   Developer(
     id = "vimalaguti",
@@ -142,4 +143,9 @@ lazy val macros = project
     }
   )
 
-// See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html for instructions on how to publish to Sonatype.
+// Releasing: push a `vX.Y.Z` tag and let CI run `ci-release`, which signs with
+// the PGP key from PGP_SECRET/PGP_PASSPHRASE and uploads the staged bundle using
+// SONATYPE_USERNAME/SONATYPE_PASSWORD (sbt 1.13 turns those two into a
+// central.sonatype.com credential on its own). Locally the same flow is
+// `+publishSigned` then `sonaUpload` (inspect on the portal) or `sonaRelease`.
+// See https://www.scala-sbt.org/1.x/docs/Using-Sonatype.html
