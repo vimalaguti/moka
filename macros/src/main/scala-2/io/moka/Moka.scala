@@ -187,7 +187,10 @@ package moka {
           val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
           findStringConstant(ann.tree).map(v => (name, v))
         }
-        resolveName(sym.pos, fallback, extracted, mode)
+        val pos =
+          if (sym.pos != c.universe.NoPosition) sym.pos
+          else c.enclosingPosition
+        resolveName(pos, fallback, extracted, mode)
       }
 
       /** Case classes are descended into; value classes are not (a value class
