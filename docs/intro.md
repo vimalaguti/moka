@@ -103,11 +103,12 @@ and one small trait of its own.
 
 Two consequences worth spelling out:
 
-- **No bson or driver dependency.** moka understands `@BsonProperty`
-  (mongo-scala-bson) and `@bsonField` (zio-bson), but it matches those
-  annotations *by simple name* and never links against either library. Use one,
-  use both, use neither — moka pulls in nothing either way, and adding moka
-  cannot drag a driver version into your build.
+- **No bson, json, or driver dependency.** moka understands `@BsonProperty`
+  (mongo-scala-bson), `@bsonField` (zio-bson), and `@jsonField` (zio-json), but
+  it matches those annotations *by simple name* and never links against any of
+  those libraries. Use one, use all, use none — moka pulls in nothing either way,
+  and adding moka cannot drag a driver or serialization library version into your
+  build.
 - **`scala-reflect` does not reach you.** It appears in moka's 2.13 POM at
   `provided` scope because it is needed to *expand* the annotation macro inside
   the compiler, never at runtime. A downstream 2.13 project compiles and runs

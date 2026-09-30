@@ -55,30 +55,36 @@ Renamed.Params.a
 
 (On Scala 2 the name is passed to the annotation instead: `@moka("Params")`.)
 
-## Bson annotations
+## Wire format annotations
 
-When a field is renamed in its bson representation, the `Fields` member
-keeps the Scala name but carries the **bson name as value** — so queries use
-the name that is actually in the database. Both the official mongo driver
-annotation and zio-bson are supported:
+When a field is renamed in its bson or json representation, the `Fields` member
+keeps the Scala name but carries the **wire name as value** — so queries use
+the name that is actually in the database or serialized payload. The official
+mongo driver annotation, zio-bson, and zio-json are supported:
 
 ```scala mdoc
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
+import zio.json.jsonField
 
-case class Fruit(@BsonProperty("c") color: String, @bsonField("w") weight: Double)
+case class Fruit(
+    @BsonProperty("c") color: String,
+    @bsonField("w") weight: Double,
+    @jsonField("k") kind: String
+)
 object Fruit {
   val Fields = generateFields[Fruit]
 }
 
 Fruit.Fields.color
 Fruit.Fields.weight
+Fruit.Fields.kind
 ```
 
-moka does **not** depend on either library: it matches both annotations by
-simple name, so whichever one is already on your classpath is the one that
-works, and moka itself adds no dependency of its own. See
-[Dependencies](intro.md#dependencies).
+moka does **not** depend on any of these libraries: it matches annotations by
+simple name (`BsonProperty`, `bsonField`, `jsonField`), so whichever ones are
+already on your classpath work automatically, and moka adds no dependencies of
+its own. See [Dependencies](intro.md#dependencies).
 
 ## Nested fields
 

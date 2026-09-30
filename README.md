@@ -62,19 +62,21 @@ object Apple {
 }
 ```
 
-## Bson annotations
-
-Fields annotated with `@BsonProperty` (mongo-scala-bson) or `@bsonField`
-(zio-bson) keep their Scala name but carry the annotated name as value:
-
+## Renaming annotations
+ 
+Fields annotated with `@BsonProperty` (mongo-scala-bson), `@bsonField`
+(zio-bson), or `@jsonField` (zio-json) keep their Scala name but carry the
+annotated wire name as value:
+ 
 ```scala
 @moka
-case class Fruit(@BsonProperty("c") color: String)
+case class Fruit(@BsonProperty("c") color: String, @jsonField("w") weight: Double)
 object Fruit {
   val Fields = generateFields[Fruit]
 }
 
 Fruit.Fields.color == "c"
+Fruit.Fields.weight == "w"
 ```
 
 ## Nested fields

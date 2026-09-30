@@ -27,7 +27,9 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
     (field.annotations ++ ctorParam.toList.flatMap(_.annotations))
       .collectFirst {
         case ann @ Apply(_, List(Literal(StringConstant(value))))
-            if ann.tpe.typeSymbol.name == "BsonProperty" || ann.tpe.typeSymbol.name == "bsonField" =>
+            if ann.tpe.typeSymbol.name == "BsonProperty" ||
+              ann.tpe.typeSymbol.name == "bsonField" ||
+              ann.tpe.typeSymbol.name == "jsonField" =>
           value
       }
       .getOrElse(field.name)
