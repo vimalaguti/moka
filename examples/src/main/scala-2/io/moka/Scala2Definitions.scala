@@ -12,6 +12,11 @@ import zio.bson.bsonField
   * declared beside the annottee).
   */
 final case class S2Nested(@BsonProperty("z") deep: Int)
+final case class S2NestedConflictInner(
+    @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+    @org.bson.codecs.pojo.annotations.BsonProperty("b2")
+    name: String
+)
 
 object Scala2Definitions {
   @moka
