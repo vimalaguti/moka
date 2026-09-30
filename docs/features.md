@@ -57,20 +57,18 @@ Renamed.Params.a
 
 ## Wire format annotations
 
-When a field is renamed in its bson or json representation, the `Fields` member
+When a field is renamed in its bson representation, the `Fields` member
 keeps the Scala name but carries the **wire name as value** — so queries use
-the name that is actually in the database or serialized payload. The official
-mongo driver annotation, zio-bson, zio-json, and generic JSON annotations are supported:
+the name that is actually in the database. Both the official mongo driver
+annotation and zio-bson are supported:
 
 ```scala mdoc
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
-import zio.json.jsonField
 
 case class Fruit(
     @BsonProperty("c") color: String,
-    @bsonField("w") weight: Double,
-    @jsonField("k") kind: String
+    @bsonField("w") weight: Double
 )
 object Fruit {
   val Fields = generateFields[Fruit]
@@ -78,23 +76,23 @@ object Fruit {
 
 Fruit.Fields.color
 Fruit.Fields.weight
-Fruit.Fields.kind
 ```
 
 moka does **not** depend on any of these libraries: it matches annotations by
-simple name (`BsonProperty`, `bsonField`, `jsonField`, `JsonKey`, `JsonProperty`), so whichever ones are
+simple name (`BsonProperty`, `bsonField`), so whichever ones are
 already on your classpath work automatically, and moka adds no dependencies of
 its own. See [Dependencies](intro.md#dependencies).
 
-### Conflict handling and explicit selectors
+### JSON and explicit format selectors
 
-When multiple annotations appear on the same field:
-- If they specify the **same wire name** (e.g., `@BsonProperty("v") @jsonField("v")`), `generateFields` succeeds.
-- If they specify **conflicting wire names** (e.g., `@BsonProperty("b") @jsonField("j")`), `generateFields` / `@moka` aborts compilation with an error so you never silently query with the wrong field name.
+`generateFields` (and `@moka`) defaults to MongoDB's BSON wire format and ignores
+JSON annotations, avoiding unintended renames in Mongo queries.
 
-To explicitly select a target format, use `generateBsonFields` / `@mokaBson` or `generateJsonFields` / `@mokaJson`. You can also expose both from a single companion object:
+To target JSON or project both formats from the same model, use `generateBsonFields` / `@mokaBson` and `generateJsonFields` / `@mokaJson`:
 
 ```scala mdoc
+import zio.json.jsonField
+
 case class Dual(
     _id: String,
     @BsonProperty("b_col") @jsonField("color") color: String
@@ -107,6 +105,9 @@ object Dual {
 Dual.BsonFields.color
 Dual.JsonFields.color
 ```
+
+- **Supported JSON annotations**: `@jsonField` (zio-json), `@JsonKey`, and `@JsonProperty` (Jackson), matched by simple name without runtime dependencies.
+- **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`, or `@jsonField("a")` and `@JsonProperty("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
 
 ## Nested fields
 
