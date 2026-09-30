@@ -54,13 +54,12 @@ package moka {
   }
 
   sealed trait RenamingMode
-  case object AllMode      extends RenamingMode
   case object BsonOnlyMode extends RenamingMode
   case object JsonOnlyMode extends RenamingMode
 
   object mokaMacro {
     def implAll(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
-      impl(c, AllMode, "Fields")(annottees: _*)
+      impl(c, BsonOnlyMode, "Fields")(annottees: _*)
 
     def implBson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
       impl(c, BsonOnlyMode, "BsonFields")(annottees: _*)
@@ -69,7 +68,7 @@ package moka {
       impl(c, JsonOnlyMode, "JsonFields")(annottees: _*)
 
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
-      impl(c, AllMode, "Fields")(annottees: _*)
+      impl(c, BsonOnlyMode, "Fields")(annottees: _*)
 
     def impl(
         c: whitebox.Context,
@@ -121,10 +120,6 @@ package moka {
             annotations.filter(a => bsonAnnotations.contains(a._1))
           case JsonOnlyMode =>
             annotations.filter(a => jsonAnnotations.contains(a._1))
-          case AllMode =>
-            annotations.filter(a =>
-              bsonAnnotations.contains(a._1) || jsonAnnotations.contains(a._1)
-            )
         }
 
       def resolveName(
@@ -141,10 +136,13 @@ package moka {
           val formatted = matches
             .map { case (ann, v) => s"@$ann(\"$v\")" }
             .mkString(", ")
+          val target = mode match {
+            case BsonOnlyMode => "BSON"
+            case JsonOnlyMode => "JSON"
+          }
           c.abort(
             pos,
-            s"moka: conflicting renaming annotations on field '$fallback': $formatted. " +
-              "Use @mokaBson / generateBsonFields or @mokaJson / generateJsonFields to disambiguate."
+            s"moka: conflicting $target renaming annotations on field '$fallback': $formatted."
           )
         }
       }
@@ -328,8 +326,8 @@ package moka {
       }
 
       def placeholderMode(rhs: Tree): Option[RenamingMode] = rhs match {
-        case q"$_.generateFields[$_]"     => Some(AllMode)
-        case q"generateFields[$_]"        => Some(AllMode)
+        case q"$_.generateFields[$_]"     => Some(BsonOnlyMode)
+        case q"generateFields[$_]"        => Some(BsonOnlyMode)
         case q"$_.generateBsonFields[$_]" => Some(BsonOnlyMode)
         case q"generateBsonFields[$_]"    => Some(BsonOnlyMode)
         case q"$_.generateJsonFields[$_]" => Some(JsonOnlyMode)

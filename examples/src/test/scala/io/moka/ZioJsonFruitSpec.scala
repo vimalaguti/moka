@@ -8,7 +8,7 @@ final case class Variety(value: String)  extends AnyVal
 final case class Origin(value: String)   extends AnyVal
 final case class Producer(value: String) extends AnyVal
 
-@moka
+@mokaJson
 final case class Fruit(
     _id: FruitId,
     @jsonField("v") variety: Variety,
@@ -16,33 +16,33 @@ final case class Fruit(
     @jsonField("p") producer: Producer
 )
 object Fruit {
-  val Fields = generateFields[Fruit]
+  val JsonFields = generateJsonFields[Fruit]
 }
 
 final case class Nutrition(@jsonField("cal") calories: Int)
 
-@moka
+@mokaJson
 final case class FruitBasket(
     @jsonField("f") item: Fruit,
     @jsonField("nut") nutrition: Nutrition
 )
 object FruitBasket {
-  val Fields = generateFields[FruitBasket]
+  val JsonFields = generateJsonFields[FruitBasket]
 }
 
 class ZioJsonFruitSpec extends munit.FunSuite {
 
   test("zio-json @jsonField renames fields on Fruit") {
-    assertEquals(Fruit.Fields._id, "_id")
-    assertEquals(Fruit.Fields.variety, "v")
-    assertEquals(Fruit.Fields.origin, "o")
-    assertEquals(Fruit.Fields.producer, "p")
+    assertEquals(Fruit.JsonFields._id, "_id")
+    assertEquals(Fruit.JsonFields.variety, "v")
+    assertEquals(Fruit.JsonFields.origin, "o")
+    assertEquals(Fruit.JsonFields.producer, "p")
   }
 
   test("zio-json @jsonField supports nested case classes") {
-    assertEquals(FruitBasket.Fields.item._path, "f")
-    assertEquals(FruitBasket.Fields.item.variety, "f.v")
-    assertEquals(FruitBasket.Fields.nutrition._path, "nut")
-    assertEquals(FruitBasket.Fields.nutrition.calories, "nut.cal")
+    assertEquals(FruitBasket.JsonFields.item._path, "f")
+    assertEquals(FruitBasket.JsonFields.item.variety, "f.v")
+    assertEquals(FruitBasket.JsonFields.nutrition._path, "nut")
+    assertEquals(FruitBasket.JsonFields.nutrition.calories, "nut.cal")
   }
 }
