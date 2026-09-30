@@ -123,9 +123,18 @@ class Scala2ConflictSpec extends munit.FunSuite {
     @moka case class JavaOuter(inner: S2JavaInner)
     assertEquals(JavaOuter.Fields.inner.f, "inner.inner_renamed")
   }
+
+  test("Scala 2 supports named arguments on top level annotations") {
+    @moka case class NamedArgTop(
+      @org.bson.codecs.pojo.annotations.BsonProperty(value = "top_renamed")
+      f: String
+    )
+    assertEquals(NamedArgTop.Fields.f, "top_renamed")
+  }
 }
 
 case class S2JavaInner(
   @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
   f: String
 )
+
