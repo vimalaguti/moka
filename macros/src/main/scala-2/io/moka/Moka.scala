@@ -150,6 +150,11 @@ package moka {
         case _                         => None
       }
 
+      def findStringConstant(tree: Tree): Option[String] = tree match {
+        case Literal(Constant(v: String)) => Some(v)
+        case _ => tree.children.view.flatMap(findStringConstant).headOption
+      }
+
       /** Bson/json name read off the annottee's own params, which are still
         * untyped.
         */
@@ -159,12 +164,12 @@ package moka {
           pos: Position,
           mode: RenamingMode
       ): String = {
-        val extracted = mods.annotations.collect {
-          case Apply(
-                Select(New(tpt), _),
-                Literal(Constant(v: String)) :: Nil
-              ) if leafTypeName(tpt).isDefined =>
-            (leafTypeName(tpt).get, v)
+        val extracted = mods.annotations.flatMap {
+          case tree @ Apply(Select(New(tpt), _), _)
+              if leafTypeName(tpt).isDefined =>
+            val name = leafTypeName(tpt).get
+            findStringConstant(tree).map(v => (name, v))
+          case _ => None
         }
         resolveName(pos, fallback, extracted, mode)
       }
@@ -172,11 +177,6 @@ package moka {
       /** Bson/json name read off a nested type's constructor param, which is
         * typed.
         */
-      def findStringConstant(tree: Tree): Option[String] = tree match {
-        case Literal(Constant(v: String)) => Some(v)
-        case _ => tree.children.view.flatMap(findStringConstant).headOption
-      }
-
       def bsonNameFromSymbol(
           sym: Symbol,
           fallback: String,
