@@ -90,14 +90,7 @@ class Scala2ConflictSpec extends munit.FunSuite {
 
   test("conflict inside nested type fails compilation (Scala 2)") {
     val errors = compileErrors("""
-      object NestedConflict {
-        @moka case class InnerBad(
-          @org.mongodb.scala.bson.annotations.BsonProperty("b1")
-          @zio.bson.bsonField("b2")
-          name: String
-        )
-        @moka case class OuterBad(inner: InnerBad)
-      }
+      @moka case class OuterBad(inner: S2NestedConflictInner)
     """)
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
   }
