@@ -137,4 +137,36 @@ class Scala3ConflictSpec extends munit.FunSuite {
     assertEquals(S3TestOwner.BsonFields.inner.code, "inner.b_code")
     assertEquals(S3TestOwner.JsonFields.inner.code, "inner.j_code")
   }
+
+  test("Java BsonProperty supports positional and named arguments in Scala 3") {
+    case class JavaPosModel(
+      @org.bson.codecs.pojo.annotations.BsonProperty("pos_renamed")
+      field: String
+    )
+    object JavaPosModel {
+      val Fields = generateFields[JavaPosModel]
+    }
+    assertEquals(JavaPosModel.Fields.field, "pos_renamed")
+
+    case class JavaNamedModel(
+      @org.bson.codecs.pojo.annotations.BsonProperty(value = "named_renamed")
+      field: String
+    )
+    object JavaNamedModel {
+      val Fields = generateFields[JavaNamedModel]
+    }
+    assertEquals(JavaNamedModel.Fields.field, "named_renamed")
+  }
+
+  test("Java BsonProperty supports nested types in Scala 3") {
+    case class JavaInner(
+      @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
+      field: String
+    )
+    case class JavaOuter(inner: JavaInner)
+    object JavaOuter {
+      val Fields = generateFields[JavaOuter]
+    }
+    assertEquals(JavaOuter.Fields.inner.field, "inner.inner_renamed")
+  }
 }

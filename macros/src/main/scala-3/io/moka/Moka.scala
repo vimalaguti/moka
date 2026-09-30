@@ -53,9 +53,18 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
       owner.primaryConstructor.paramSymss.flatten.find(_.name == field.name)
     val allAnnotations =
       field.annotations ++ ctorParam.toList.flatMap(_.annotations)
-    val extracted = allAnnotations.collect {
-      case ann @ Apply(_, List(Literal(StringConstant(value)))) =>
-        (ann.tpe.typeSymbol.name, value)
+    def extractStringArg(tree: Term): Option[String] = tree match
+      case Apply(fun, args) =>
+        args
+          .collectFirst {
+            case Literal(StringConstant(value))              => value
+            case NamedArg(_, Literal(StringConstant(value))) => value
+          }
+          .orElse(extractStringArg(fun))
+      case _ => None
+
+    val extracted = allAnnotations.flatMap { ann =>
+      extractStringArg(ann).map(v => (ann.tpe.typeSymbol.name, v))
     }.distinct
 
     val filtered = mode match
