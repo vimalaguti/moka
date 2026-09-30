@@ -13,6 +13,24 @@ object OneField {
   val Fields = generateFields[OneField]
 }
 
+@moka
+final case class SharedNestedDual(
+    @BsonProperty("b_code") @zio.json.jsonField("j_code") code: String
+)
+object SharedNestedDual {
+  val BsonFields = generateBsonFields[SharedNestedDual]
+  val JsonFields = generateJsonFields[SharedNestedDual]
+}
+
+@moka
+final case class SharedOuterDual(
+    inner: SharedNestedDual
+)
+object SharedOuterDual {
+  val BsonFields = generateBsonFields[SharedOuterDual]
+  val JsonFields = generateJsonFields[SharedOuterDual]
+}
+
 case class A(value: Int) extends AnyVal
 
 object Definitions {

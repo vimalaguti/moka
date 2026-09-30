@@ -52,4 +52,10 @@ object Scala2Definitions {
   object NestedWithCompanion {
     val default: NestedWithCompanion = NestedWithCompanion(S2Nested(0))
   }
+
+  @mokaBson
+  final case class S2FormatBson(@BsonProperty("b") name: String)
+
+  @mokaJson
+  final case class S2FormatJson(@zio.json.jsonField("j") name: String)
 }
