@@ -118,4 +118,14 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(S2TestOwner.BsonFields.inner.code, "inner.b_code")
     assertEquals(S2TestOwner.JsonFields.inner.code, "inner.code")
   }
+
+  test("Java BsonProperty supports nested types in Scala 2") {
+    @moka case class JavaOuter(inner: S2JavaInner)
+    assertEquals(JavaOuter.Fields.inner.f, "inner.inner_renamed")
+  }
 }
+
+case class S2JavaInner(
+  @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
+  f: String
+)

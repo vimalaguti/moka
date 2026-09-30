@@ -172,6 +172,11 @@ package moka {
       /** Bson/json name read off a nested type's constructor param, which is
         * typed.
         */
+      def findStringConstant(tree: Tree): Option[String] = tree match {
+        case Literal(Constant(v: String)) => Some(v)
+        case _ => tree.children.view.flatMap(findStringConstant).headOption
+      }
+
       def bsonNameFromSymbol(
           sym: Symbol,
           fallback: String,
@@ -180,9 +185,7 @@ package moka {
         sym.info // force completion before reading annotations
         val extracted = sym.annotations.flatMap { ann =>
           val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
-          ann.tree.children.collectFirst { case Literal(Constant(v: String)) =>
-            (name, v)
-          }
+          findStringConstant(ann.tree).map(v => (name, v))
         }
         resolveName(sym.pos, fallback, extracted, mode)
       }
