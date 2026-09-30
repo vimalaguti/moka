@@ -9,7 +9,7 @@ This document tracks known issues identified during review, their root cause ana
 | ID | Severity | Summary | Status |
 |---|---|---|---|
 | **BUG-1** | High | Scala 3 never reads Java annotations (e.g. Java driver's `@BsonProperty`) | Fixed |
-| **BUG-2** | High | Scala 2 loses Java annotations on nested types (`bsonNameFromSymbol`) | Identified / Solution Proposed |
+| **BUG-2** | High | Scala 2 loses Java annotations on nested types (`bsonNameFromSymbol`) | Fixed |
 | **BUG-3** | Medium | Scala 2 ignores named arguments like `@BsonProperty(value = "x")` at top level | Identified / Solution Proposed |
 | **BUG-4** | Medium | Test suite lacks real Java annotation test cases | Identified / Solution Proposed |
 | **BUG-5** | Low | Scala 2 nested conflict test fails on inner class rather than exercising nested check | Identified / Solution Proposed |
