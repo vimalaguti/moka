@@ -105,10 +105,14 @@ definitions files *are* the compile-time half of the test.
   Both macros match by **simple name only** — Scala 2 has no symbols at that phase and Scala 3 deliberately
   mirrors it, which is also why moka depends on neither bson nor json libraries.
   Scala 3 must read the primary-constructor param's annotations, not just the field's.
-  If annotations on the same field disagree, `generateFields` / `@moka` aborts with a
-  compile error. To select a specific format or project both, use `generateBsonFields` /
-  `@mokaBson` (object `BsonFields`) and `generateJsonFields` / `@mokaJson` (object
-  `JsonFields`).
+  `generateFields` / `@moka` is strictly BSON-focused (inspecting only `@BsonProperty` and `@bsonField`),
+  ignoring JSON annotations so Mongo queries are never polluted.
+  `generateBsonFields` / `@mokaBson` (object `BsonFields`) is an explicit BSON selector.
+  `generateJsonFields` / `@mokaJson` (object `JsonFields`) selects JSON annotations.
+  If annotations for the same target format disagree, compilation fails fast with an error.
+  On Scala 2.13, zio-json's `@jsonField` extends `Annotation` (not `StaticAnnotation`) so scalac 2.13
+  drops it across compilation runs (only visible within the same compilation unit). BSON annotations
+  and Jackson `@JsonProperty` survive across compilation runs on both Scala 2 and 3.
 - Existing companion members survive. A custom object name comes from `@moka("Name")` on
   Scala 2, from the val name on Scala 3.
 - The root `Fields` deliberately has **no** `path` member, so a field actually named `path`

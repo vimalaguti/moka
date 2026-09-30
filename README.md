@@ -64,13 +64,12 @@ object Apple {
 
 ## Renaming annotations
  
-Fields annotated with `@BsonProperty` (mongo-scala-bson), `@bsonField`
-(zio-bson), or `@jsonField` (zio-json) keep their Scala name but carry the
-annotated wire name as value:
+Fields annotated with `@BsonProperty` (mongo-scala-bson) or `@bsonField`
+(zio-bson) keep their Scala name but carry the annotated wire name as value:
  
 ```scala
 @moka
-case class Fruit(@BsonProperty("c") color: String, @jsonField("w") weight: Double)
+case class Fruit(@BsonProperty("c") color: String, @bsonField("w") weight: Double)
 object Fruit {
   val Fields = generateFields[Fruit]
 }
@@ -79,13 +78,12 @@ Fruit.Fields.color == "c"
 Fruit.Fields.weight == "w"
 ```
 
-### Conflict resolution & explicit selectors
+### JSON and explicit format selectors
 
-If multiple annotations appear on the same field:
-- **Agreeing names** (e.g. `@BsonProperty("v") @jsonField("v")`) succeed cleanly with `generateFields`.
-- **Conflicting names** (e.g. `@BsonProperty("b") @jsonField("j")`) fail compilation immediately under `generateFields` / `@moka` to prevent silent misdirection.
+`generateFields` (and `@moka`) defaults to MongoDB's BSON wire format and ignores
+JSON annotations, avoiding unintended renames in Mongo queries.
 
-To explicitly target one format or project both from the same model, use `generateBsonFields` / `@mokaBson` and `generateJsonFields` / `@mokaJson`:
+To target JSON or project both formats from the same model, use `generateBsonFields` / `@mokaBson` and `generateJsonFields` / `@mokaJson`:
 
 ```scala
 @moka
@@ -98,6 +96,9 @@ object Fruit {
   val JsonFields = generateJsonFields[Fruit] // JsonFields.color == "color"
 }
 ```
+
+- **Supported JSON annotations**: `@jsonField` (zio-json), `@JsonKey`, and `@JsonProperty` (Jackson), matched by simple name without library dependencies.
+- **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`, or `@jsonField("a")` and `@JsonProperty("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
 
 ## Nested fields
 
