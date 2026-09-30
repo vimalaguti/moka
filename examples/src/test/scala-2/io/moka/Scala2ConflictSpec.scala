@@ -128,6 +128,18 @@ class Scala2ConflictSpec extends munit.FunSuite {
     )
     assertEquals(NamedArgTop.Fields.f, "top_renamed")
   }
+
+  test("stacking @moka and @mokaBson with placeholders succeeds on Scala 2") {
+    @moka
+    @mokaBson
+    case class StackedPlaceholders(a: Int)
+    object StackedPlaceholders {
+      val Fields = generateFields[StackedPlaceholders]
+      val BsonFields = generateBsonFields[StackedPlaceholders]
+    }
+    assertEquals(StackedPlaceholders.Fields.a, "a")
+    assertEquals(StackedPlaceholders.BsonFields.a, "a")
+  }
 }
 
 case class S2JavaInner(
