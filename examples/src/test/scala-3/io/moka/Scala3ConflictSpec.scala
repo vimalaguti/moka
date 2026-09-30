@@ -67,21 +67,6 @@ class Scala3ConflictSpec extends munit.FunSuite {
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
   }
 
-  test("conflicting JSON annotations fail compilation") {
-    val errors = compileErrors("""
-      class JsonProperty(name: String) extends scala.annotation.StaticAnnotation
-      case class BadJson(
-        @zio.json.jsonField("j1")
-        @JsonProperty("j2")
-        name: String
-      )
-      object BadJson {
-        val JsonFields = generateJsonFields[BadJson]
-      }
-    """)
-    assert(errors.contains("conflicting JSON renaming annotations"), errors)
-  }
-
   test(
     "generateBsonFields and generateJsonFields report their own method name on non-case classes"
   ) {

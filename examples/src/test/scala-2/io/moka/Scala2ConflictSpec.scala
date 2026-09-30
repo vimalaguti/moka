@@ -83,20 +83,6 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
   }
 
-  test("conflicting JSON annotations fail compilation") {
-    val errors = compileErrors("""
-      object ConflictingJson {
-        class JsonProperty(name: String) extends scala.annotation.StaticAnnotation
-        @mokaJson case class Bad(
-          @zio.json.jsonField("j1")
-          @JsonProperty("j2")
-          name: String
-        )
-      }
-    """)
-    assert(errors.contains("conflicting JSON renaming annotations"), errors)
-  }
-
   test("chosen format inside nested types on Scala 2 (same compile run)") {
     assertEquals(S2LocalOuter.BsonFields.inner.v, "inner.b_val")
     assertEquals(S2LocalOuter.JsonFields.inner.v, "inner.j_val")

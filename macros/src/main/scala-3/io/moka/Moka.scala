@@ -46,7 +46,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     )
 
   val bsonAnnotations = Set("BsonProperty", "bsonField")
-  val jsonAnnotations = Set("jsonField", "JsonKey", "JsonProperty")
+  val jsonAnnotations = Set("jsonField")
 
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =

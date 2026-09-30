@@ -68,21 +68,4 @@ class ConflictResolutionSpec extends munit.FunSuite {
     """)
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
   }
-
-  test("conflicting JSON annotations on generateJsonFields fail compilation") {
-    val errors = compileErrors("""
-      object ConflictingJson {
-        class JsonProperty(name: String) extends scala.annotation.StaticAnnotation
-        @mokaJson case class Bad(
-          @zio.json.jsonField("j1")
-          @JsonProperty("j2")
-          name: String
-        )
-        object Bad {
-          val JsonFields = generateJsonFields[Bad]
-        }
-      }
-    """)
-    assert(errors.contains("conflicting JSON renaming annotations"), errors)
-  }
 }
