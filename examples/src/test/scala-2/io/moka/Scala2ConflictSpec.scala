@@ -126,7 +126,9 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(SharedOuterDual.JsonFields.inner.code, "inner.j_code")
   }
 
-  test("nested type from earlier compile run drops zio-json @jsonField on Scala 2") {
+  test(
+    "nested type from earlier compile run drops zio-json @jsonField on Scala 2"
+  ) {
     assertEquals(S2TestOwner.BsonFields.inner.code, "inner.b_code")
     assertEquals(S2TestOwner.JsonFields.inner.code, "inner.code")
   }

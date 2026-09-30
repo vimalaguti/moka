@@ -31,7 +31,9 @@ object JsonOnlyFruit {
 
 class ConflictResolutionSpec extends munit.FunSuite {
 
-  test("generateFields ignores @jsonField and preserves original Scala field name") {
+  test(
+    "generateFields ignores @jsonField and preserves original Scala field name"
+  ) {
     assertEquals(JsonOnlyFruit.Fields.kind, "kind")
     assertEquals(JsonOnlyFruit.JsonFields.kind, "fruit_kind")
   }
