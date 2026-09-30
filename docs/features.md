@@ -106,8 +106,8 @@ Dual.BsonFields.color
 Dual.JsonFields.color
 ```
 
-- **Supported JSON annotations**: `@jsonField` (zio-json), `@JsonKey`, and `@JsonProperty` (Jackson), matched by simple name without runtime dependencies.
-- **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`, or `@jsonField("a")` and `@JsonProperty("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
+- **Supported JSON annotations**: `@jsonField` (zio-json), matched by simple name without runtime dependencies.
+- **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
 
 ## Nested fields
 

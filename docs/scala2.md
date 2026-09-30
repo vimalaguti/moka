@@ -43,7 +43,7 @@ Renamed.Params.a == "a"
 Besides `@moka` (which generates `Fields` in BSON mode), Scala 2 provides dedicated annotations:
 
 - `@mokaBson`: generates `BsonFields` by default, inspecting only BSON annotations (`@BsonProperty`, `@bsonField`).
-- `@mokaJson`: generates `JsonFields` by default, inspecting only JSON annotations (`@jsonField`, `@JsonKey`, `@JsonProperty`).
+- `@mokaJson`: generates `JsonFields` by default, inspecting zio-json's `@jsonField`.
 
 ```scala
 @mokaJson
@@ -98,7 +98,7 @@ Note where `Engine` is declared. Scala 2 has two restrictions Scala 3 does not:
    `scalac` 2.13 discards it during bytecode generation. If a nested type is
    compiled in a separate compilation run (e.g. in a separate module or library),
    `@jsonField` is erased and `JsonFields` will use the Scala field name. (Java annotations
-   like `@BsonProperty` and `@JsonProperty` do not suffer from this issue).
+   like `@BsonProperty` do not suffer from this issue).
 
 ## Full code
 

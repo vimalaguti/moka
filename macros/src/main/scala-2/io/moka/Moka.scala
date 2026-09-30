@@ -106,7 +106,7 @@ package moka {
         }
 
       val bsonAnnotations = Set("BsonProperty", "bsonField")
-      val jsonAnnotations = Set("jsonField", "JsonKey", "JsonProperty")
+      val jsonAnnotations = Set("jsonField")
 
       def filterByMode(
           annotations: List[(String, String)],
