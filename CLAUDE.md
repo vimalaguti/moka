@@ -100,15 +100,15 @@ definitions files *are* the compile-time half of the test.
 
 - **Literal types.** `Fields.a` has type `"a"`, not `String`, on **both** versions (`ValDef`
   with `tq"$name"` on 2; `ConstantType` refinement on 3).
-- **Field renaming.** `@BsonProperty("x")` / `@bsonField("x")` / `@jsonField("x")` keep the
-  Scala member name but change its *value and literal type*. Both macros match by
-  **simple name only** — Scala 2 has no symbols at that phase and Scala 3 deliberately
+- **Field renaming.** `@BsonProperty("x")` / `@bsonField("x")` / `@jsonField("x")` /
+  `@JsonKey("x")` / `@JsonProperty("x")` keep the Scala member name but change its *value and literal type*.
+  Both macros match by **simple name only** — Scala 2 has no symbols at that phase and Scala 3 deliberately
   mirrors it, which is also why moka depends on neither bson nor json libraries.
   Scala 3 must read the primary-constructor param's annotations, not just the field's.
   If annotations on the same field disagree, `generateFields` / `@moka` aborts with a
   compile error. To select a specific format or project both, use `generateBsonFields` /
-  `@mokaBson` (object `BsonFields`) and `generateZioJsonFields` / `@mokaZioJson` (object
-  `ZioJsonFields`).
+  `@mokaBson` (object `BsonFields`) and `generateJsonFields` / `@mokaJson` (object
+  `JsonFields`).
 - Existing companion members survive. A custom object name comes from `@moka("Name")` on
   Scala 2, from the val name on Scala 3.
 - The root `Fields` deliberately has **no** `path` member, so a field actually named `path`

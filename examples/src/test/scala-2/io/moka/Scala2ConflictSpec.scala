@@ -8,8 +8,8 @@ final case class S2BsonOnly(
     @BsonProperty("b") @jsonField("j") name: String
 )
 
-@mokaZioJson
-final case class S2ZioJsonOnly(
+@mokaJson
+final case class S2JsonOnly(
     @BsonProperty("b") @jsonField("j") name: String
 )
 
@@ -18,8 +18,8 @@ final case class S2Dual(
     @BsonProperty("b_var") @jsonField("j_var") variety: String
 )
 object S2Dual {
-  val BsonFields    = generateBsonFields[S2Dual]
-  val ZioJsonFields = generateZioJsonFields[S2Dual]
+  val BsonFields = generateBsonFields[S2Dual]
+  val JsonFields = generateJsonFields[S2Dual]
 }
 
 @moka
@@ -36,17 +36,15 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(S2BsonOnly.BsonFields.name, "b")
   }
 
-  test(
-    "@mokaZioJson selects ZIO JSON annotations and defaults to ZioJsonFields"
-  ) {
-    assertEquals(S2ZioJsonOnly.ZioJsonFields.name, "j")
+  test("@mokaJson selects JSON annotations and defaults to JsonFields") {
+    assertEquals(S2JsonOnly.JsonFields.name, "j")
   }
 
   test(
-    "companion with generateBsonFields and generateZioJsonFields projects both"
+    "companion with generateBsonFields and generateJsonFields projects both"
   ) {
     assertEquals(S2Dual.BsonFields.variety, "b_var")
-    assertEquals(S2Dual.ZioJsonFields.variety, "j_var")
+    assertEquals(S2Dual.JsonFields.variety, "j_var")
   }
 
   test("agreeing annotations on generateFields succeed") {

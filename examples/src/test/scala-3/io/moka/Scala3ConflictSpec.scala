@@ -10,19 +10,19 @@ object S3BsonOnly {
   val BsonFields = generateBsonFields[S3BsonOnly]
 }
 
-final case class S3ZioJsonOnly(
+final case class S3JsonOnly(
     @BsonProperty("b") @jsonField("j") name: String
 )
-object S3ZioJsonOnly {
-  val ZioJsonFields = generateZioJsonFields[S3ZioJsonOnly]
+object S3JsonOnly {
+  val JsonFields = generateJsonFields[S3JsonOnly]
 }
 
 final case class S3Dual(
     @BsonProperty("b_var") @jsonField("j_var") variety: String
 )
 object S3Dual {
-  val BsonFields    = generateBsonFields[S3Dual]
-  val ZioJsonFields = generateZioJsonFields[S3Dual]
+  val BsonFields = generateBsonFields[S3Dual]
+  val JsonFields = generateJsonFields[S3Dual]
 }
 
 final case class S3Agreeing(
@@ -38,15 +38,15 @@ class Scala3ConflictSpec extends munit.FunSuite {
     assertEquals(S3BsonOnly.BsonFields.name, "b")
   }
 
-  test("generateZioJsonFields selects ZIO JSON annotations") {
-    assertEquals(S3ZioJsonOnly.ZioJsonFields.name, "j")
+  test("generateJsonFields selects JSON annotations") {
+    assertEquals(S3JsonOnly.JsonFields.name, "j")
   }
 
   test(
-    "companion with generateBsonFields and generateZioJsonFields projects both"
+    "companion with generateBsonFields and generateJsonFields projects both"
   ) {
     assertEquals(S3Dual.BsonFields.variety, "b_var")
-    assertEquals(S3Dual.ZioJsonFields.variety, "j_var")
+    assertEquals(S3Dual.JsonFields.variety, "j_var")
   }
 
   test("agreeing annotations on generateFields succeed") {

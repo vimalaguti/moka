@@ -60,7 +60,7 @@ Renamed.Params.a
 When a field is renamed in its bson or json representation, the `Fields` member
 keeps the Scala name but carries the **wire name as value** — so queries use
 the name that is actually in the database or serialized payload. The official
-mongo driver annotation, zio-bson, and zio-json are supported:
+mongo driver annotation, zio-bson, zio-json, and generic JSON annotations are supported:
 
 ```scala mdoc
 import org.mongodb.scala.bson.annotations.BsonProperty
@@ -82,7 +82,7 @@ Fruit.Fields.kind
 ```
 
 moka does **not** depend on any of these libraries: it matches annotations by
-simple name (`BsonProperty`, `bsonField`, `jsonField`), so whichever ones are
+simple name (`BsonProperty`, `bsonField`, `jsonField`, `JsonKey`, `JsonProperty`), so whichever ones are
 already on your classpath work automatically, and moka adds no dependencies of
 its own. See [Dependencies](intro.md#dependencies).
 
@@ -92,7 +92,7 @@ When multiple annotations appear on the same field:
 - If they specify the **same wire name** (e.g., `@BsonProperty("v") @jsonField("v")`), `generateFields` succeeds.
 - If they specify **conflicting wire names** (e.g., `@BsonProperty("b") @jsonField("j")`), `generateFields` / `@moka` aborts compilation with an error so you never silently query with the wrong field name.
 
-To explicitly select a target format, use `generateBsonFields` / `@mokaBson` or `generateZioJsonFields` / `@mokaZioJson`. You can also expose both from a single companion object:
+To explicitly select a target format, use `generateBsonFields` / `@mokaBson` or `generateJsonFields` / `@mokaJson`. You can also expose both from a single companion object:
 
 ```scala mdoc
 case class Dual(
@@ -100,12 +100,12 @@ case class Dual(
     @BsonProperty("b_col") @jsonField("color") color: String
 )
 object Dual {
-  val BsonFields    = generateBsonFields[Dual]
-  val ZioJsonFields = generateZioJsonFields[Dual]
+  val BsonFields = generateBsonFields[Dual]
+  val JsonFields = generateJsonFields[Dual]
 }
 
 Dual.BsonFields.color
-Dual.ZioJsonFields.color
+Dual.JsonFields.color
 ```
 
 ## Nested fields

@@ -85,7 +85,7 @@ If multiple annotations appear on the same field:
 - **Agreeing names** (e.g. `@BsonProperty("v") @jsonField("v")`) succeed cleanly with `generateFields`.
 - **Conflicting names** (e.g. `@BsonProperty("b") @jsonField("j")`) fail compilation immediately under `generateFields` / `@moka` to prevent silent misdirection.
 
-To explicitly target one format or project both from the same model, use `generateBsonFields` / `@mokaBson` and `generateZioJsonFields` / `@mokaZioJson`:
+To explicitly target one format or project both from the same model, use `generateBsonFields` / `@mokaBson` and `generateJsonFields` / `@mokaJson`:
 
 ```scala
 @moka
@@ -94,8 +94,8 @@ case class Fruit(
   @BsonProperty("b_col") @jsonField("color") color: String
 )
 object Fruit {
-  val BsonFields    = generateBsonFields[Fruit]    // BsonFields.color == "b_col"
-  val ZioJsonFields = generateZioJsonFields[Fruit] // ZioJsonFields.color == "color"
+  val BsonFields = generateBsonFields[Fruit] // BsonFields.color == "b_col"
+  val JsonFields = generateJsonFields[Fruit] // JsonFields.color == "color"
 }
 ```
 

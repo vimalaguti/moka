@@ -17,9 +17,9 @@ package object moka {
   def generateBsonFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
 
   @compileTimeOnly(
-    "io.moka.generateZioJsonFields is a placeholder that @moka / @mokaZioJson rewrites. If the case class already carries @mokaZioJson, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
+    "io.moka.generateJsonFields is a placeholder that @moka / @mokaJson rewrites. If the case class already carries @mokaJson, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
   )
-  def generateZioJsonFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
+  def generateJsonFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
 }
 
 package moka {
@@ -47,16 +47,16 @@ package moka {
   }
 
   @compileTimeOnly(
-    "@mokaZioJson was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
+    "@mokaJson was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
   )
-  class mokaZioJson(name: String = "ZioJsonFields") extends StaticAnnotation {
-    def macroTransform(annottees: Any*): Any = macro mokaMacro.implZioJson
+  class mokaJson(name: String = "JsonFields") extends StaticAnnotation {
+    def macroTransform(annottees: Any*): Any = macro mokaMacro.implJson
   }
 
   sealed trait RenamingMode
-  case object AllMode         extends RenamingMode
-  case object BsonOnlyMode    extends RenamingMode
-  case object ZioJsonOnlyMode extends RenamingMode
+  case object AllMode      extends RenamingMode
+  case object BsonOnlyMode extends RenamingMode
+  case object JsonOnlyMode extends RenamingMode
 
   object mokaMacro {
     def implAll(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
@@ -65,8 +65,8 @@ package moka {
     def implBson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
       impl(c, BsonOnlyMode, "BsonFields")(annottees: _*)
 
-    def implZioJson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
-      impl(c, ZioJsonOnlyMode, "ZioJsonFields")(annottees: _*)
+    def implJson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
+      impl(c, JsonOnlyMode, "JsonFields")(annottees: _*)
 
     def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
       impl(c, AllMode, "Fields")(annottees: _*)
@@ -109,8 +109,8 @@ package moka {
           case _ => c.abort(c.enclosingPosition, "Invalid class " + classDecl)
         }
 
-      val bsonAnnotations    = Set("BsonProperty", "bsonField")
-      val zioJsonAnnotations = Set("jsonField")
+      val bsonAnnotations = Set("BsonProperty", "bsonField")
+      val jsonAnnotations = Set("jsonField", "JsonKey", "JsonProperty")
 
       def filterByMode(
           annotations: List[(String, String)],
@@ -119,13 +119,11 @@ package moka {
         mode match {
           case BsonOnlyMode =>
             annotations.filter(a => bsonAnnotations.contains(a._1))
-          case ZioJsonOnlyMode =>
-            annotations.filter(a => zioJsonAnnotations.contains(a._1))
+          case JsonOnlyMode =>
+            annotations.filter(a => jsonAnnotations.contains(a._1))
           case AllMode =>
             annotations.filter(a =>
-              bsonAnnotations.contains(a._1) || zioJsonAnnotations.contains(
-                a._1
-              )
+              bsonAnnotations.contains(a._1) || jsonAnnotations.contains(a._1)
             )
         }
 
@@ -146,7 +144,7 @@ package moka {
           c.abort(
             pos,
             s"moka: conflicting renaming annotations on field '$fallback': $formatted. " +
-              "Use @mokaBson / generateBsonFields or @mokaZioJson / generateZioJsonFields to disambiguate."
+              "Use @mokaBson / generateBsonFields or @mokaJson / generateJsonFields to disambiguate."
           )
         }
       }
@@ -330,13 +328,13 @@ package moka {
       }
 
       def placeholderMode(rhs: Tree): Option[RenamingMode] = rhs match {
-        case q"$_.generateFields[$_]"        => Some(AllMode)
-        case q"generateFields[$_]"           => Some(AllMode)
-        case q"$_.generateBsonFields[$_]"    => Some(BsonOnlyMode)
-        case q"generateBsonFields[$_]"       => Some(BsonOnlyMode)
-        case q"$_.generateZioJsonFields[$_]" => Some(ZioJsonOnlyMode)
-        case q"generateZioJsonFields[$_]"    => Some(ZioJsonOnlyMode)
-        case _                               => None
+        case q"$_.generateFields[$_]"     => Some(AllMode)
+        case q"generateFields[$_]"        => Some(AllMode)
+        case q"$_.generateBsonFields[$_]" => Some(BsonOnlyMode)
+        case q"generateBsonFields[$_]"    => Some(BsonOnlyMode)
+        case q"$_.generateJsonFields[$_]" => Some(JsonOnlyMode)
+        case q"generateJsonFields[$_]"    => Some(JsonOnlyMode)
+        case _                            => None
       }
 
       annottees.map(_.tree).toList match {

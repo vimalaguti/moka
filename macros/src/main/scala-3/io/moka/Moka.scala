@@ -6,12 +6,12 @@ import scala.quoted.*
 /** No-op on Scala 3: kept so cross-compiled sources can annotate case classes
   * for the Scala 2 macro. Field generation happens via [[generateFields]].
   */
-class moka(name: String = "Fields")               extends StaticAnnotation
-class mokaBson(name: String = "BsonFields")       extends StaticAnnotation
-class mokaZioJson(name: String = "ZioJsonFields") extends StaticAnnotation
+class moka(name: String = "Fields")         extends StaticAnnotation
+class mokaBson(name: String = "BsonFields") extends StaticAnnotation
+class mokaJson(name: String = "JsonFields") extends StaticAnnotation
 
 enum RenamingMode:
-  case All, BsonOnly, ZioJsonOnly
+  case All, BsonOnly, JsonOnly
 
 transparent inline def generateFields[T]: FieldNames = ${
   generateFieldsImpl[T]
@@ -21,8 +21,8 @@ transparent inline def generateBsonFields[T]: FieldNames = ${
   generateBsonFieldsImpl[T]
 }
 
-transparent inline def generateZioJsonFields[T]: FieldNames = ${
-  generateZioJsonFieldsImpl[T]
+transparent inline def generateJsonFields[T]: FieldNames = ${
+  generateJsonFieldsImpl[T]
 }
 
 private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
@@ -31,8 +31,8 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
 private def generateBsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
   generateImpl[T](RenamingMode.BsonOnly)
 
-private def generateZioJsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.ZioJsonOnly)
+private def generateJsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
+  generateImpl[T](RenamingMode.JsonOnly)
 
 private def generateImpl[T: Type](mode: RenamingMode)(using
     Quotes
@@ -45,8 +45,8 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
       s"generateFields[${rootTpe.typeSymbol.name}] requires a case class"
     )
 
-  val bsonAnnotations    = Set("BsonProperty", "bsonField")
-  val zioJsonAnnotations = Set("jsonField")
+  val bsonAnnotations = Set("BsonProperty", "bsonField")
+  val jsonAnnotations = Set("jsonField", "JsonKey", "JsonProperty")
 
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =
@@ -61,11 +61,11 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
     val filtered = mode match
       case RenamingMode.BsonOnly =>
         extracted.filter((ann, _) => bsonAnnotations.contains(ann))
-      case RenamingMode.ZioJsonOnly =>
-        extracted.filter((ann, _) => zioJsonAnnotations.contains(ann))
+      case RenamingMode.JsonOnly =>
+        extracted.filter((ann, _) => jsonAnnotations.contains(ann))
       case RenamingMode.All =>
         extracted.filter((ann, _) =>
-          bsonAnnotations.contains(ann) || zioJsonAnnotations.contains(ann)
+          bsonAnnotations.contains(ann) || jsonAnnotations.contains(ann)
         )
 
     val distinctValues = filtered.map(_._2).distinct
@@ -76,7 +76,7 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
         filtered.map((ann, v) => s"@$ann(\"$v\")").mkString(", ")
       report.errorAndAbort(
         s"moka: conflicting renaming annotations on field '${field.name}': $formatted. " +
-          "Use @mokaBson / generateBsonFields or @mokaZioJson / generateZioJsonFields to disambiguate."
+          "Use @mokaBson / generateBsonFields or @mokaJson / generateJsonFields to disambiguate."
       )
 
   /** Case classes are descended into; value classes are not (a value class is
