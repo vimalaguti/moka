@@ -68,4 +68,8 @@ class ConflictResolutionSpec extends munit.FunSuite {
     """)
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
   }
+
+  test("cross-compiled Java driver BsonProperty renames field") {
+    assertEquals(SharedJavaBson.Fields.f, "jb")
+  }
 }
