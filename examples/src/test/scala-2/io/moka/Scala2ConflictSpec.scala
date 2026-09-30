@@ -93,6 +93,10 @@ class Scala2ConflictSpec extends munit.FunSuite {
       @moka case class OuterBad(inner: S2NestedConflictInner)
     """)
     assert(errors.contains("conflicting BSON renaming annotations"), errors)
+    assert(
+      errors.contains("OuterBad"),
+      s"Expected error position to point to OuterBad source line, but got: '$errors'"
+    )
   }
 
   test("definitions from Scala2Definitions") {
