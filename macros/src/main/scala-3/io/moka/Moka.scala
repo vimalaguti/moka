@@ -10,7 +10,7 @@ class moka(name: String = "Fields")         extends StaticAnnotation
 class mokaBson(name: String = "BsonFields") extends StaticAnnotation
 class mokaJson(name: String = "JsonFields") extends StaticAnnotation
 
-enum RenamingMode:
+private[moka] enum RenamingMode:
   case BsonOnly, JsonOnly
 
 transparent inline def generateFields[T]: FieldNames = ${
@@ -26,15 +26,15 @@ transparent inline def generateJsonFields[T]: FieldNames = ${
 }
 
 private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.BsonOnly)
+  generateImpl[T](RenamingMode.BsonOnly, "generateFields")
 
 private def generateBsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.BsonOnly)
+  generateImpl[T](RenamingMode.BsonOnly, "generateBsonFields")
 
 private def generateJsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.JsonOnly)
+  generateImpl[T](RenamingMode.JsonOnly, "generateJsonFields")
 
-private def generateImpl[T: Type](mode: RenamingMode)(using
+private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     Quotes
 ): Expr[FieldNames] =
   import quotes.reflect.*
@@ -42,7 +42,7 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
   val rootTpe = TypeRepr.of[T]
   if !rootTpe.typeSymbol.flags.is(Flags.Case) then
     report.errorAndAbort(
-      s"generateFields[${rootTpe.typeSymbol.name}] requires a case class"
+      s"$methodName[${rootTpe.typeSymbol.name}] requires a case class"
     )
 
   val bsonAnnotations = Set("BsonProperty", "bsonField")
