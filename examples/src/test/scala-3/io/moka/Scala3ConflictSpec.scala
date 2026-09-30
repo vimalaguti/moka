@@ -82,11 +82,19 @@ class Scala3ConflictSpec extends munit.FunSuite {
     assert(errors.contains("conflicting JSON renaming annotations"), errors)
   }
 
-  test("generateBsonFields and generateJsonFields report their own method name on non-case classes") {
+  test(
+    "generateBsonFields and generateJsonFields report their own method name on non-case classes"
+  ) {
     val bsonErr = compileErrors("generateBsonFields[String]")
-    assert(bsonErr.contains("generateBsonFields[String] requires a case class"), bsonErr)
+    assert(
+      bsonErr.contains("generateBsonFields[String] requires a case class"),
+      bsonErr
+    )
     val jsonErr = compileErrors("generateJsonFields[String]")
-    assert(jsonErr.contains("generateJsonFields[String] requires a case class"), jsonErr)
+    assert(
+      jsonErr.contains("generateJsonFields[String] requires a case class"),
+      jsonErr
+    )
   }
 
   test("chosen format inside nested types (Scala 3)") {
