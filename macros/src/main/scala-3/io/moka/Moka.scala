@@ -11,7 +11,7 @@ class mokaBson(name: String = "BsonFields") extends StaticAnnotation
 class mokaJson(name: String = "JsonFields") extends StaticAnnotation
 
 enum RenamingMode:
-  case All, BsonOnly, JsonOnly
+  case BsonOnly, JsonOnly
 
 transparent inline def generateFields[T]: FieldNames = ${
   generateFieldsImpl[T]
@@ -26,7 +26,7 @@ transparent inline def generateJsonFields[T]: FieldNames = ${
 }
 
 private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.All)
+  generateImpl[T](RenamingMode.BsonOnly)
 
 private def generateBsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
   generateImpl[T](RenamingMode.BsonOnly)
@@ -63,10 +63,6 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
         extracted.filter((ann, _) => bsonAnnotations.contains(ann))
       case RenamingMode.JsonOnly =>
         extracted.filter((ann, _) => jsonAnnotations.contains(ann))
-      case RenamingMode.All =>
-        extracted.filter((ann, _) =>
-          bsonAnnotations.contains(ann) || jsonAnnotations.contains(ann)
-        )
 
     val distinctValues = filtered.map(_._2).distinct
     if distinctValues.isEmpty then field.name
@@ -74,9 +70,11 @@ private def generateImpl[T: Type](mode: RenamingMode)(using
     else
       val formatted =
         filtered.map((ann, v) => s"@$ann(\"$v\")").mkString(", ")
+      val target = mode match
+        case RenamingMode.BsonOnly => "BSON"
+        case RenamingMode.JsonOnly => "JSON"
       report.errorAndAbort(
-        s"moka: conflicting renaming annotations on field '${field.name}': $formatted. " +
-          "Use @mokaBson / generateBsonFields or @mokaJson / generateJsonFields to disambiguate."
+        s"moka: conflicting $target renaming annotations on field '${field.name}': $formatted."
       )
 
   /** Case classes are descended into; value classes are not (a value class is

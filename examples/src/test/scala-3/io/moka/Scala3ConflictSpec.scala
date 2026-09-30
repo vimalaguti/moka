@@ -53,17 +53,32 @@ class Scala3ConflictSpec extends munit.FunSuite {
     assertEquals(S3Agreeing.Fields.field, "common")
   }
 
-  test("conflicting annotations on generateFields fail compilation") {
+  test("conflicting BSON annotations fail compilation") {
     val errors = compileErrors("""
       case class Bad(
-        @org.mongodb.scala.bson.annotations.BsonProperty("b")
-        @zio.json.jsonField("j")
+        @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+        @zio.bson.bsonField("b2")
         name: String
       )
       object Bad {
         val Fields = generateFields[Bad]
       }
     """)
-    assert(errors.contains("conflicting"), errors)
+    assert(errors.contains("conflicting BSON renaming annotations"), errors)
+  }
+
+  test("conflicting JSON annotations fail compilation") {
+    val errors = compileErrors("""
+      class JsonProperty(name: String) extends scala.annotation.StaticAnnotation
+      case class BadJson(
+        @zio.json.jsonField("j1")
+        @JsonProperty("j2")
+        name: String
+      )
+      object BadJson {
+        val JsonFields = generateJsonFields[BadJson]
+      }
+    """)
+    assert(errors.contains("conflicting JSON renaming annotations"), errors)
   }
 }

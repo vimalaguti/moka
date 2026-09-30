@@ -20,7 +20,21 @@ object SharedAgreeing {
   val Fields = generateFields[SharedAgreeing]
 }
 
+@moka
+final case class JsonOnlyFruit(
+    @jsonField("fruit_kind") kind: String
+)
+object JsonOnlyFruit {
+  val Fields     = generateFields[JsonOnlyFruit]
+  val JsonFields = generateJsonFields[JsonOnlyFruit]
+}
+
 class ConflictResolutionSpec extends munit.FunSuite {
+
+  test("generateFields ignores @jsonField and preserves original Scala field name") {
+    assertEquals(JsonOnlyFruit.Fields.kind, "kind")
+    assertEquals(JsonOnlyFruit.JsonFields.kind, "fruit_kind")
+  }
 
   test(
     "cross-compiled companion with generateBsonFields and generateJsonFields projects both"
@@ -33,12 +47,12 @@ class ConflictResolutionSpec extends munit.FunSuite {
     assertEquals(SharedAgreeing.Fields.field, "common")
   }
 
-  test("conflicting annotations on generateFields fail compilation") {
+  test("conflicting BSON annotations on generateFields fail compilation") {
     val errors = compileErrors("""
-      object Conflicting {
+      object ConflictingBson {
         @moka case class Bad(
-          @org.mongodb.scala.bson.annotations.BsonProperty("b")
-          @zio.json.jsonField("j")
+          @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+          @zio.bson.bsonField("b2")
           name: String
         )
         object Bad {
@@ -46,6 +60,23 @@ class ConflictResolutionSpec extends munit.FunSuite {
         }
       }
     """)
-    assert(errors.contains("conflicting"), errors)
+    assert(errors.contains("conflicting BSON renaming annotations"), errors)
+  }
+
+  test("conflicting JSON annotations on generateJsonFields fail compilation") {
+    val errors = compileErrors("""
+      object ConflictingJson {
+        class JsonProperty(name: String) extends scala.annotation.StaticAnnotation
+        @mokaJson case class Bad(
+          @zio.json.jsonField("j1")
+          @JsonProperty("j2")
+          name: String
+        )
+        object Bad {
+          val JsonFields = generateJsonFields[Bad]
+        }
+      }
+    """)
+    assert(errors.contains("conflicting JSON renaming annotations"), errors)
   }
 }
