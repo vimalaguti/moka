@@ -30,6 +30,25 @@ object S2Agreeing {
   val Fields = generateFields[S2Agreeing]
 }
 
+@moka
+final case class S2LocalInner(
+    @BsonProperty("b_val") @jsonField("j_val") v: String
+)
+
+@moka
+final case class S2LocalOuter(inner: S2LocalInner)
+object S2LocalOuter {
+  val BsonFields = generateBsonFields[S2LocalOuter]
+  val JsonFields = generateJsonFields[S2LocalOuter]
+}
+
+@moka
+final case class S2TestOwner(inner: SharedNestedDual)
+object S2TestOwner {
+  val BsonFields = generateBsonFields[S2TestOwner]
+  val JsonFields = generateJsonFields[S2TestOwner]
+}
+
 class Scala2ConflictSpec extends munit.FunSuite {
 
   test("@mokaBson selects BSON annotations and defaults to BsonFields") {
@@ -76,5 +95,39 @@ class Scala2ConflictSpec extends munit.FunSuite {
       }
     """)
     assert(errors.contains("conflicting JSON renaming annotations"), errors)
+  }
+
+  test("chosen format inside nested types on Scala 2 (same compile run)") {
+    assertEquals(S2LocalOuter.BsonFields.inner.v, "inner.b_val")
+    assertEquals(S2LocalOuter.JsonFields.inner.v, "inner.j_val")
+  }
+
+  test("conflict inside nested type fails compilation (Scala 2)") {
+    val errors = compileErrors("""
+      object NestedConflict {
+        @moka case class InnerBad(
+          @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+          @zio.bson.bsonField("b2")
+          name: String
+        )
+        @moka case class OuterBad(inner: InnerBad)
+      }
+    """)
+    assert(errors.contains("conflicting BSON renaming annotations"), errors)
+  }
+
+  test("definitions from Scala2Definitions") {
+    assertEquals(Scala2Definitions.S2FormatBson.BsonFields.name, "b")
+    assertEquals(Scala2Definitions.S2FormatJson.JsonFields.name, "j")
+  }
+
+  test("nested type from same compile run preserves both formats") {
+    assertEquals(SharedOuterDual.BsonFields.inner.code, "inner.b_code")
+    assertEquals(SharedOuterDual.JsonFields.inner.code, "inner.j_code")
+  }
+
+  test("nested type from earlier compile run drops zio-json @jsonField on Scala 2") {
+    assertEquals(S2TestOwner.BsonFields.inner.code, "inner.b_code")
+    assertEquals(S2TestOwner.JsonFields.inner.code, "inner.code")
   }
 }

@@ -88,4 +88,60 @@ class Scala3ConflictSpec extends munit.FunSuite {
     val jsonErr = compileErrors("generateJsonFields[String]")
     assert(jsonErr.contains("generateJsonFields[String] requires a case class"), jsonErr)
   }
+
+  test("chosen format inside nested types (Scala 3)") {
+    case class LocalInner(@BsonProperty("b_val") @jsonField("j_val") v: String)
+    case class LocalOuter(inner: LocalInner)
+    object LocalOuter {
+      val BsonFields = generateBsonFields[LocalOuter]
+      val JsonFields = generateJsonFields[LocalOuter]
+    }
+    assertEquals(LocalOuter.BsonFields.inner.v, "inner.b_val")
+    assertEquals(LocalOuter.JsonFields.inner.v, "inner.j_val")
+  }
+
+  test("conflict inside nested type fails compilation (Scala 3)") {
+    val errors = compileErrors("""
+      case class InnerBad(
+        @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+        @zio.bson.bsonField("b2")
+        v: String
+      )
+      case class OuterBad(inner: InnerBad)
+      object OuterBad {
+        val Fields = generateFields[OuterBad]
+      }
+    """)
+    assert(errors.contains("conflicting BSON renaming annotations"), errors)
+  }
+
+  test("conflict split between constructor parameter and field (Scala 3)") {
+    import scala.annotation.meta.{field, param}
+    val errors = compileErrors("""
+      case class SplitBad(
+        @(org.mongodb.scala.bson.annotations.BsonProperty @field)("b1")
+        @(zio.bson.bsonField @param)("b2")
+        name: String
+      )
+      object SplitBad {
+        val Fields = generateFields[SplitBad]
+      }
+    """)
+    assert(errors.contains("conflicting BSON renaming annotations"), errors)
+  }
+
+  test("definitions from Scala3Definitions") {
+    assertEquals(Scala3Definitions.S3FormatBson.BsonFields.name, "b")
+    assertEquals(Scala3Definitions.S3FormatJson.JsonFields.name, "j")
+  }
+
+  test("nested type from earlier compile run preserves JSON in Scala 3") {
+    case class S3TestOwner(inner: SharedNestedDual)
+    object S3TestOwner {
+      val BsonFields = generateBsonFields[S3TestOwner]
+      val JsonFields = generateJsonFields[S3TestOwner]
+    }
+    assertEquals(S3TestOwner.BsonFields.inner.code, "inner.b_code")
+    assertEquals(S3TestOwner.JsonFields.inner.code, "inner.j_code")
+  }
 }

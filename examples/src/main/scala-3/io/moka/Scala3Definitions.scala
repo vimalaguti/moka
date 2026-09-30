@@ -46,4 +46,14 @@ object Scala3Definitions {
   object S3Holder {
     val Fields = generateFields[S3Holder]
   }
+
+  final case class S3FormatBson(@BsonProperty("b") name: String)
+  object S3FormatBson {
+    val BsonFields = generateBsonFields[S3FormatBson]
+  }
+
+  final case class S3FormatJson(@zio.json.jsonField("j") name: String)
+  object S3FormatJson {
+    val JsonFields = generateJsonFields[S3FormatJson]
+  }
 }

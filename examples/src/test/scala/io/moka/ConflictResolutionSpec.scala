@@ -43,6 +43,10 @@ class ConflictResolutionSpec extends munit.FunSuite {
     assertEquals(SharedDual.JsonFields.variety, "j_var")
   }
 
+  test("cross-compiled nested BSON projection from Definitions") {
+    assertEquals(SharedOuterDual.BsonFields.inner.code, "inner.b_code")
+  }
+
   test("agreeing annotations on generateFields succeed") {
     assertEquals(SharedAgreeing.Fields.field, "common")
   }
