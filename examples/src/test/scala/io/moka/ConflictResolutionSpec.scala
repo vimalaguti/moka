@@ -8,8 +8,8 @@ final case class SharedDual(
     @BsonProperty("b_var") @jsonField("j_var") variety: String
 )
 object SharedDual {
-  val BsonFields    = generateBsonFields[SharedDual]
-  val ZioJsonFields = generateZioJsonFields[SharedDual]
+  val BsonFields = generateBsonFields[SharedDual]
+  val JsonFields = generateJsonFields[SharedDual]
 }
 
 @moka
@@ -23,10 +23,10 @@ object SharedAgreeing {
 class ConflictResolutionSpec extends munit.FunSuite {
 
   test(
-    "cross-compiled companion with generateBsonFields and generateZioJsonFields projects both"
+    "cross-compiled companion with generateBsonFields and generateJsonFields projects both"
   ) {
     assertEquals(SharedDual.BsonFields.variety, "b_var")
-    assertEquals(SharedDual.ZioJsonFields.variety, "j_var")
+    assertEquals(SharedDual.JsonFields.variety, "j_var")
   }
 
   test("agreeing annotations on generateFields succeed") {
