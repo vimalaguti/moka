@@ -10,6 +10,16 @@ package object moka {
     "io.moka.generateFields is a placeholder that @moka rewrites. If the case class already carries @moka, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
   )
   def generateFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
+
+  @compileTimeOnly(
+    "io.moka.generateBsonFields is a placeholder that @moka / @mokaBson rewrites. If the case class already carries @mokaBson, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
+  )
+  def generateBsonFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
+
+  @compileTimeOnly(
+    "io.moka.generateZioJsonFields is a placeholder that @moka / @mokaZioJson rewrites. If the case class already carries @mokaZioJson, the annotation did not expand: add scalacOptions += \"-Ymacro-annotations\" (Scala 2.13)."
+  )
+  def generateZioJsonFields[T]: FieldsNotGenerated_AddYmacroAnnotations = ???
 }
 
 package moka {
@@ -26,18 +36,55 @@ package moka {
     "@moka was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
   )
   class moka(name: String = "Fields") extends StaticAnnotation {
-    def macroTransform(annottees: Any*): Any = macro mokaMacro.impl
+    def macroTransform(annottees: Any*): Any = macro mokaMacro.implAll
   }
 
+  @compileTimeOnly(
+    "@mokaBson was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
+  )
+  class mokaBson(name: String = "BsonFields") extends StaticAnnotation {
+    def macroTransform(annottees: Any*): Any = macro mokaMacro.implBson
+  }
+
+  @compileTimeOnly(
+    "@mokaZioJson was not expanded. On Scala 2.13 macro annotations need a compiler flag: add scalacOptions += \"-Ymacro-annotations\"."
+  )
+  class mokaZioJson(name: String = "ZioJsonFields") extends StaticAnnotation {
+    def macroTransform(annottees: Any*): Any = macro mokaMacro.implZioJson
+  }
+
+  sealed trait RenamingMode
+  case object AllMode         extends RenamingMode
+  case object BsonOnlyMode    extends RenamingMode
+  case object ZioJsonOnlyMode extends RenamingMode
+
   object mokaMacro {
-    def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] = {
+    def implAll(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
+      impl(c, AllMode, "Fields")(annottees: _*)
+
+    def implBson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
+      impl(c, BsonOnlyMode, "BsonFields")(annottees: _*)
+
+    def implZioJson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
+      impl(c, ZioJsonOnlyMode, "ZioJsonFields")(annottees: _*)
+
+    def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
+      impl(c, AllMode, "Fields")(annottees: _*)
+
+    def impl(
+        c: whitebox.Context,
+        defaultMode: RenamingMode,
+        defaultName: String
+    )(
+        annottees: c.Expr[Any]*
+    ): c.Expr[Any] = {
       import c.universe._
 
       def extractObjectDestinationName: TermName =
         c.prefix.tree match {
           case Apply(_, Literal(Constant(name: String)) :: Nil) =>
             TermName(name)
-          case Apply(_, Nil) => TermName("Fields")
+          case Apply(_, Nil) => TermName(defaultName)
           case _ =>
             c.abort(c.enclosingPosition, "Invalid annotation arguments")
         }
@@ -62,38 +109,89 @@ package moka {
           case _ => c.abort(c.enclosingPosition, "Invalid class " + classDecl)
         }
 
-      val bsonAnnotations = Set("BsonProperty", "bsonField", "jsonField")
+      val bsonAnnotations    = Set("BsonProperty", "bsonField")
+      val zioJsonAnnotations = Set("jsonField")
 
-      /** Bson name read off the annottee's own params, which are still untyped.
-        */
-      def bsonNameFromMods(mods: Modifiers, fallback: String): String =
-        mods.annotations
-          .collect {
-            case Apply(
-                  Select(New(Ident(TypeName(ann))), _),
-                  Literal(Constant(v: String)) :: Nil
-                ) if bsonAnnotations.contains(ann) =>
-              v
-          }
-          .headOption
-          .getOrElse(fallback)
+      def filterByMode(
+          annotations: List[(String, String)],
+          mode: RenamingMode
+      ): List[(String, String)] =
+        mode match {
+          case BsonOnlyMode =>
+            annotations.filter(a => bsonAnnotations.contains(a._1))
+          case ZioJsonOnlyMode =>
+            annotations.filter(a => zioJsonAnnotations.contains(a._1))
+          case AllMode =>
+            annotations.filter(a =>
+              bsonAnnotations.contains(a._1) || zioJsonAnnotations.contains(
+                a._1
+              )
+            )
+        }
 
-      /** Bson name read off a nested type's constructor param, which is typed.
+      def resolveName(
+          pos: Position,
+          fallback: String,
+          annotations: List[(String, String)],
+          mode: RenamingMode
+      ): String = {
+        val matches        = filterByMode(annotations, mode)
+        val distinctValues = matches.map(_._2).distinct
+        if (distinctValues.isEmpty) fallback
+        else if (distinctValues.length == 1) distinctValues.head
+        else {
+          val formatted = matches
+            .map { case (ann, v) => s"@$ann(\"$v\")" }
+            .mkString(", ")
+          c.abort(
+            pos,
+            s"moka: conflicting renaming annotations on field '$fallback': $formatted. " +
+              "Use @mokaBson / generateBsonFields or @mokaZioJson / generateZioJsonFields to disambiguate."
+          )
+        }
+      }
+
+      def leafTypeName(tree: Tree): Option[String] = tree match {
+        case Ident(TypeName(name))     => Some(name)
+        case Select(_, TypeName(name)) => Some(name)
+        case _                         => None
+      }
+
+      /** Bson/json name read off the annottee's own params, which are still
+        * untyped.
         */
-      def bsonNameFromSymbol(sym: Symbol, fallback: String): String = {
+      def bsonNameFromMods(
+          mods: Modifiers,
+          fallback: String,
+          pos: Position,
+          mode: RenamingMode
+      ): String = {
+        val extracted = mods.annotations.collect {
+          case Apply(
+                Select(New(tpt), _),
+                Literal(Constant(v: String)) :: Nil
+              ) if leafTypeName(tpt).isDefined =>
+            (leafTypeName(tpt).get, v)
+        }
+        resolveName(pos, fallback, extracted, mode)
+      }
+
+      /** Bson/json name read off a nested type's constructor param, which is
+        * typed.
+        */
+      def bsonNameFromSymbol(
+          sym: Symbol,
+          fallback: String,
+          mode: RenamingMode
+      ): String = {
         sym.info // force completion before reading annotations
-        sym.annotations
-          .collectFirst {
-            case ann
-                if bsonAnnotations.contains(
-                  ann.tree.tpe.typeSymbol.name.decodedName.toString
-                ) =>
-              ann.tree.children.collectFirst {
-                case Literal(Constant(v: String)) => v
-              }
+        val extracted = sym.annotations.flatMap { ann =>
+          val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
+          ann.tree.children.collectFirst { case Literal(Constant(v: String)) =>
+            (name, v)
           }
-          .flatten
-          .getOrElse(fallback)
+        }
+        resolveName(sym.pos, fallback, extracted, mode)
       }
 
       /** Case classes are descended into; value classes are not (a value class
@@ -135,7 +233,8 @@ package moka {
           tpe: Type,
           path: String,
           seen: Set[String],
-          isArray: Boolean
+          isArray: Boolean,
+          mode: RenamingMode
       ): Tree = {
         val pathType  = tq"$path"
         val pathValue = q"$path"
@@ -151,43 +250,54 @@ package moka {
                 tpe,
                 path + ".$",
                 seen,
-                isArray = false
+                isArray = false,
+                mode = mode
               ),
-              node(TermName("_all"), tpe, path + ".$[]", seen, isArray = false)
+              node(
+                TermName("_all"),
+                tpe,
+                path + ".$[]",
+                seen,
+                isArray = false,
+                mode = mode
+              )
             )
           else Nil
-        val members = pathMember :: (membersOf(tpe, path, seen) ::: arrayOps)
+        val members =
+          pathMember :: (membersOf(tpe, path, seen, mode) ::: arrayOps)
         q"object $term extends _root_.io.moka.FieldPath[$pathType] { ..$members }"
       }
 
       def membersOf(
           tpe: Type,
           prefix: String,
-          seen: Set[String]
+          seen: Set[String],
+          mode: RenamingMode
       ): List[Tree] = {
         val cls = tpe.dealias.typeSymbol.asClass
         val params =
           cls.primaryConstructor.asMethod.paramLists.headOption.getOrElse(Nil)
         params.map { p =>
           val fieldName = p.name.decodedName.toString
-          val path      = pathOf(prefix, bsonNameFromSymbol(p, fieldName))
+          val path      = pathOf(prefix, bsonNameFromSymbol(p, fieldName, mode))
           val (fieldTpe, isArray) = unwrap(p.typeSignatureIn(tpe.dealias))
           val key                 = fieldTpe.typeSymbol.fullName
           if (isDescendable(fieldTpe) && !seen.contains(key))
-            node(TermName(fieldName), fieldTpe, path, seen + key, isArray)
+            node(TermName(fieldName), fieldTpe, path, seen + key, isArray, mode)
           else leaf(TermName(fieldName), path)
         }
       }
 
       def generateFieldNames(
           className: TypeName,
-          terms: List[ValDef]
+          terms: List[ValDef],
+          mode: RenamingMode
       ): List[Tree] = {
         val selfName = className.decodedName.toString
         terms.map {
           case vd @ q"$mods val $name: $tpt = $rhs" =>
             val fieldName = name.decodedName.toString
-            val path      = bsonNameFromMods(mods, fieldName)
+            val path      = bsonNameFromMods(mods, fieldName, vd.pos, mode)
             val term      = TermName(fieldName)
             // Typechecking a type that mentions the annottee would re-enter this
             // very annotation expansion, so a self-reference is recognised
@@ -211,7 +321,7 @@ package moka {
                 )
               val (ft, isArray) = unwrap(resolved.tpe)
               if (isDescendable(ft))
-                node(term, ft, path, Set(ft.typeSymbol.fullName), isArray)
+                node(term, ft, path, Set(ft.typeSymbol.fullName), isArray, mode)
               else leaf(term, path)
             }
           case term =>
@@ -219,10 +329,14 @@ package moka {
         }
       }
 
-      def isGenerateFieldsCall(rhs: Tree): Boolean = rhs match {
-        case q"$_.generateFields[$_]" => true
-        case q"generateFields[$_]"    => true
-        case _                        => false
+      def placeholderMode(rhs: Tree): Option[RenamingMode] = rhs match {
+        case q"$_.generateFields[$_]"        => Some(AllMode)
+        case q"generateFields[$_]"           => Some(AllMode)
+        case q"$_.generateBsonFields[$_]"    => Some(BsonOnlyMode)
+        case q"generateBsonFields[$_]"       => Some(BsonOnlyMode)
+        case q"$_.generateZioJsonFields[$_]" => Some(ZioJsonOnlyMode)
+        case q"generateZioJsonFields[$_]"    => Some(ZioJsonOnlyMode)
+        case _                               => None
       }
 
       annottees.map(_.tree).toList match {
@@ -230,7 +344,8 @@ package moka {
           val (className, fields) = extractCaseClassParts(classDecl)
 
           // generate the names
-          val generatedTerms = generateFieldNames(className, fields.head)
+          val generatedTerms =
+            generateFieldNames(className, fields.head, defaultMode)
 
           // generate Fields object
           val objectName   = extractObjectDestinationName
@@ -251,24 +366,27 @@ package moka {
           val (mods, tname, parents, self, stats) = extractCompanionObjectParts(
             singleton
           )
-
-          // generate the names
-          val generatedTerms = generateFieldNames(className, fields.head)
-          val objectName     = extractObjectDestinationName
+          val objectName = extractObjectDestinationName
 
           // replace placeholder vals (val X = generateFields[T]) with the
           // generated object, so cross-compiled sources can share definitions
           // with the Scala 3 inline macro
           var replacedPlaceholder = false
           val updatedStats = stats.map {
-            case q"$_ val $name: $_ = $rhs" if isGenerateFieldsCall(rhs) =>
+            case q"$_ val $name: $_ = $rhs" if placeholderMode(rhs).isDefined =>
               replacedPlaceholder = true
-              q"object $name { ..$generatedTerms }"
+              val mode  = placeholderMode(rhs).get
+              val terms = generateFieldNames(className, fields.head, mode)
+              q"object $name { ..$terms }"
             case other => other
           }
           val newStats =
             if (replacedPlaceholder) updatedStats
-            else q"object $objectName { ..$generatedTerms }" +: stats
+            else {
+              val terms =
+                generateFieldNames(className, fields.head, defaultMode)
+              q"object $objectName { ..$terms }" +: stats
+            }
 
           val companion =
             q"""
