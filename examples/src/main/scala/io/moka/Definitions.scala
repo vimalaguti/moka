@@ -31,6 +31,15 @@ object SharedOuterDual {
   val JsonFields = generateJsonFields[SharedOuterDual]
 }
 
+@moka
+final case class SharedJavaBson(
+    @org.bson.codecs.pojo.annotations.BsonProperty("jb")
+    f: String
+)
+object SharedJavaBson {
+  val Fields = generateFields[SharedJavaBson]
+}
+
 case class A(value: Int) extends AnyVal
 
 object Definitions {
