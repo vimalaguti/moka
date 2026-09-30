@@ -100,11 +100,11 @@ definitions files *are* the compile-time half of the test.
 
 - **Literal types.** `Fields.a` has type `"a"`, not `String`, on **both** versions (`ValDef`
   with `tq"$name"` on 2; `ConstantType` refinement on 3).
-- **BSON renaming.** `@BsonProperty("x")` / `@bsonField("x")` keep the Scala member name but
-  change its *value and literal type*. Both macros match by **simple name only** — Scala 2 has
-  no symbols at that phase and Scala 3 deliberately mirrors it, which is also why moka depends
-  on neither bson library. Scala 3 must read the primary-constructor param's annotations, not
-  just the field's.
+- **Field renaming.** `@BsonProperty("x")` / `@bsonField("x")` / `@jsonField("x")` keep the
+  Scala member name but change its *value and literal type*. Both macros match by
+  **simple name only** — Scala 2 has no symbols at that phase and Scala 3 deliberately
+  mirrors it, which is also why moka depends on neither bson nor json libraries.
+  Scala 3 must read the primary-constructor param's annotations, not just the field's.
 - Existing companion members survive. A custom object name comes from `@moka("Name")` on
   Scala 2, from the val name on Scala 3.
 - The root `Fields` deliberately has **no** `path` member, so a field actually named `path`

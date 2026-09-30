@@ -62,7 +62,7 @@ package moka {
           case _ => c.abort(c.enclosingPosition, "Invalid class " + classDecl)
         }
 
-      val bsonAnnotations = Set("BsonProperty", "bsonField")
+      val bsonAnnotations = Set("BsonProperty", "bsonField", "jsonField")
 
       /** Bson name read off the annottee's own params, which are still untyped.
         */

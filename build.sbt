@@ -76,6 +76,7 @@ lazy val examples = project
     // Pinned: 1.0.7 is built on Scala 3.4 and 1.0.8 on 3.5.2, so neither can be
     // read by the 3.3 LTS compiler (TASTy 28.5 vs the 28.3 it expects).
     libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
+    libraryDependencies += "dev.zio"       %% "zio-json" % "1.0.0",
     libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test
   )
   .dependsOn(macros)
