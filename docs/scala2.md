@@ -54,7 +54,7 @@ Payload.JsonFields.userId == "user_id"
 
 ### Projecting both BSON and JSON
 
-To expose both formats from the same case class, do not stack macro annotations (e.g. `@moka @mokaBson`). Instead, use `@moka` on the class and declare placeholder vals in the companion:
+To expose both formats from the same case class, declare placeholder vals in the companion (recommended for cross-compiling with Scala 3), or stack format annotations:
 
 ```scala
 @moka

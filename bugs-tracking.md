@@ -14,7 +14,7 @@ This document tracks known issues identified during review, their root cause ana
 | **BUG-4** | Medium | Test suite lacks real Java annotation test cases | Fixed |
 | **BUG-5** | Low | Scala 2 nested conflict test fails on inner class rather than exercising nested check | Fixed |
 | **BUG-6** | Low | Conflicts on bytecode symbols report at `NoPosition` without file/line info | Fixed |
-| **BUG-7** | Low | Stacking `@moka` and `@mokaBson` with placeholders fails with "BsonFields is already defined" | Identified / Solution Proposed |
+| **BUG-7** | Low | Stacking `@moka` and `@mokaBson` with placeholders fails with "BsonFields is already defined" | Fixed |
 
 ---
 

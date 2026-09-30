@@ -379,8 +379,14 @@ package moka {
               q"object $name { ..$terms }"
             case other => other
           }
+          val alreadyDefined = stats.exists {
+            case q"$_ object $name extends ..$_ { $_ => ..$_ }" =>
+              name.decodedName.toString == objectName.decodedName.toString
+            case _ => false
+          }
           val newStats =
             if (replacedPlaceholder) updatedStats
+            else if (alreadyDefined) stats
             else {
               val terms =
                 generateFieldNames(className, fields.head, defaultMode)
