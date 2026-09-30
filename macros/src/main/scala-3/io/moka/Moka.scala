@@ -6,13 +6,37 @@ import scala.quoted.*
 /** No-op on Scala 3: kept so cross-compiled sources can annotate case classes
   * for the Scala 2 macro. Field generation happens via [[generateFields]].
   */
-class moka(name: String = "Fields") extends StaticAnnotation
+class moka(name: String = "Fields")               extends StaticAnnotation
+class mokaBson(name: String = "BsonFields")       extends StaticAnnotation
+class mokaZioJson(name: String = "ZioJsonFields") extends StaticAnnotation
+
+enum RenamingMode:
+  case All, BsonOnly, ZioJsonOnly
 
 transparent inline def generateFields[T]: FieldNames = ${
   generateFieldsImpl[T]
 }
 
+transparent inline def generateBsonFields[T]: FieldNames = ${
+  generateBsonFieldsImpl[T]
+}
+
+transparent inline def generateZioJsonFields[T]: FieldNames = ${
+  generateZioJsonFieldsImpl[T]
+}
+
 private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
+  generateImpl[T](RenamingMode.All)
+
+private def generateBsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
+  generateImpl[T](RenamingMode.BsonOnly)
+
+private def generateZioJsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
+  generateImpl[T](RenamingMode.ZioJsonOnly)
+
+private def generateImpl[T: Type](mode: RenamingMode)(using
+    Quotes
+): Expr[FieldNames] =
   import quotes.reflect.*
 
   val rootTpe = TypeRepr.of[T]
@@ -21,18 +45,39 @@ private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
       s"generateFields[${rootTpe.typeSymbol.name}] requires a case class"
     )
 
+  val bsonAnnotations    = Set("BsonProperty", "bsonField")
+  val zioJsonAnnotations = Set("jsonField")
+
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =
       owner.primaryConstructor.paramSymss.flatten.find(_.name == field.name)
-    (field.annotations ++ ctorParam.toList.flatMap(_.annotations))
-      .collectFirst {
-        case ann @ Apply(_, List(Literal(StringConstant(value))))
-            if ann.tpe.typeSymbol.name == "BsonProperty" ||
-              ann.tpe.typeSymbol.name == "bsonField" ||
-              ann.tpe.typeSymbol.name == "jsonField" =>
-          value
-      }
-      .getOrElse(field.name)
+    val allAnnotations =
+      field.annotations ++ ctorParam.toList.flatMap(_.annotations)
+    val extracted = allAnnotations.collect {
+      case ann @ Apply(_, List(Literal(StringConstant(value)))) =>
+        (ann.tpe.typeSymbol.name, value)
+    }.distinct
+
+    val filtered = mode match
+      case RenamingMode.BsonOnly =>
+        extracted.filter((ann, _) => bsonAnnotations.contains(ann))
+      case RenamingMode.ZioJsonOnly =>
+        extracted.filter((ann, _) => zioJsonAnnotations.contains(ann))
+      case RenamingMode.All =>
+        extracted.filter((ann, _) =>
+          bsonAnnotations.contains(ann) || zioJsonAnnotations.contains(ann)
+        )
+
+    val distinctValues = filtered.map(_._2).distinct
+    if distinctValues.isEmpty then field.name
+    else if distinctValues.length == 1 then distinctValues.head
+    else
+      val formatted =
+        filtered.map((ann, v) => s"@$ann(\"$v\")").mkString(", ")
+      report.errorAndAbort(
+        s"moka: conflicting renaming annotations on field '${field.name}': $formatted. " +
+          "Use @mokaBson / generateBsonFields or @mokaZioJson / generateZioJsonFields to disambiguate."
+      )
 
   /** Case classes are descended into; value classes are not (a value class is
     * stored flattened, so its path is the outer field's path).

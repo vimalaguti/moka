@@ -79,6 +79,26 @@ Fruit.Fields.color == "c"
 Fruit.Fields.weight == "w"
 ```
 
+### Conflict resolution & explicit selectors
+
+If multiple annotations appear on the same field:
+- **Agreeing names** (e.g. `@BsonProperty("v") @jsonField("v")`) succeed cleanly with `generateFields`.
+- **Conflicting names** (e.g. `@BsonProperty("b") @jsonField("j")`) fail compilation immediately under `generateFields` / `@moka` to prevent silent misdirection.
+
+To explicitly target one format or project both from the same model, use `generateBsonFields` / `@mokaBson` and `generateZioJsonFields` / `@mokaZioJson`:
+
+```scala
+@moka
+case class Fruit(
+  _id: String,
+  @BsonProperty("b_col") @jsonField("color") color: String
+)
+object Fruit {
+  val BsonFields    = generateBsonFields[Fruit]    // BsonFields.color == "b_col"
+  val ZioJsonFields = generateZioJsonFields[Fruit] // ZioJsonFields.color == "color"
+}
+```
+
 ## Nested fields
 
 A field whose type is another case class becomes a path node exposing that

@@ -86,6 +86,28 @@ simple name (`BsonProperty`, `bsonField`, `jsonField`), so whichever ones are
 already on your classpath work automatically, and moka adds no dependencies of
 its own. See [Dependencies](intro.md#dependencies).
 
+### Conflict handling and explicit selectors
+
+When multiple annotations appear on the same field:
+- If they specify the **same wire name** (e.g., `@BsonProperty("v") @jsonField("v")`), `generateFields` succeeds.
+- If they specify **conflicting wire names** (e.g., `@BsonProperty("b") @jsonField("j")`), `generateFields` / `@moka` aborts compilation with an error so you never silently query with the wrong field name.
+
+To explicitly select a target format, use `generateBsonFields` / `@mokaBson` or `generateZioJsonFields` / `@mokaZioJson`. You can also expose both from a single companion object:
+
+```scala mdoc
+case class Dual(
+    _id: String,
+    @BsonProperty("b_col") @jsonField("color") color: String
+)
+object Dual {
+  val BsonFields    = generateBsonFields[Dual]
+  val ZioJsonFields = generateZioJsonFields[Dual]
+}
+
+Dual.BsonFields.color
+Dual.ZioJsonFields.color
+```
+
 ## Nested fields
 
 When a field's type is another case class, its `Fields` member is not a plain
