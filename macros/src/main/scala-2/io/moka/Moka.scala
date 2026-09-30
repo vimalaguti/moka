@@ -53,9 +53,9 @@ package moka {
     def macroTransform(annottees: Any*): Any = macro mokaMacro.implJson
   }
 
-  sealed trait RenamingMode
-  case object BsonOnlyMode extends RenamingMode
-  case object JsonOnlyMode extends RenamingMode
+  private[moka] sealed trait RenamingMode
+  private[moka] case object BsonOnlyMode extends RenamingMode
+  private[moka] case object JsonOnlyMode extends RenamingMode
 
   object mokaMacro {
     def implAll(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
@@ -66,9 +66,6 @@ package moka {
 
     def implJson(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
       impl(c, JsonOnlyMode, "JsonFields")(annottees: _*)
-
-    def impl(c: whitebox.Context)(annottees: c.Expr[Any]*): c.Expr[Any] =
-      impl(c, BsonOnlyMode, "Fields")(annottees: _*)
 
     def impl(
         c: whitebox.Context,
