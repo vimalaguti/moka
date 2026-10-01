@@ -123,8 +123,8 @@ class Scala2ConflictSpec extends munit.FunSuite {
 
   test("Scala 2 supports named arguments on top level annotations") {
     @moka case class NamedArgTop(
-      @org.bson.codecs.pojo.annotations.BsonProperty(value = "top_renamed")
-      f: String
+        @org.bson.codecs.pojo.annotations.BsonProperty(value = "top_renamed")
+        f: String
     )
     assertEquals(NamedArgTop.Fields.f, "top_renamed")
   }
@@ -134,7 +134,7 @@ class Scala2ConflictSpec extends munit.FunSuite {
     @mokaBson
     case class StackedPlaceholders(a: Int)
     object StackedPlaceholders {
-      val Fields = generateFields[StackedPlaceholders]
+      val Fields     = generateFields[StackedPlaceholders]
       val BsonFields = generateBsonFields[StackedPlaceholders]
     }
     assertEquals(StackedPlaceholders.Fields.a, "a")
@@ -143,7 +143,6 @@ class Scala2ConflictSpec extends munit.FunSuite {
 }
 
 case class S2JavaInner(
-  @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
-  f: String
+    @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
+    f: String
 )
-
