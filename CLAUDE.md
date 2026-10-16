@@ -23,9 +23,14 @@ sbt bloopInstall                                # .bloop/ is gitignored; regener
 MOKA_DEBUG=1 sbt compile                        # Scala 3: print post-inlining trees
 ```
 
-Modules: `root` (aggregate), `macros` (the library, `name := "moka"`), `examples` (demo + all
-tests), `docs` (rooted at `moka-docs/`, mdoc + Docusaurus + ghpages). `bench` and `benchJmh`
-are not aggregated, so CI never builds them.
+Modules: `macros` (the library, `name := "moka"`), `examples` (demo + most tests),
+`examplesOptOut` (`examples-opt-out/`, 2.13-only sources compiled with the opt-out, which is
+global to a compilation — hence its own project), `docs` (rooted at `moka-docs/`, mdoc +
+Docusaurus + ghpages), `bench`, `benchJmh`. **The build root is sbt's synthesized `moka-root`,
+which aggregates every project**: `lazy val root` lives in `./root/`, so its
+`.aggregate(...)` list is decorative. `+testFull` therefore compiles `bench-jmh` (and
+`bench/`, when its git-ignored generated sources exist) on all three versions — their models must obey the
+2.13 nested-object rule too. mdoc is still not run by CI.
 
 **Three sbt 2 shapes that silently do the wrong thing:**
 
@@ -105,16 +110,13 @@ definitions files *are* the compile-time half of the test.
   Both macros match by **simple name only** — Scala 2 has no symbols at that phase and Scala 3 deliberately
   mirrors it, which is also why moka depends on neither bson nor json libraries.
   Scala 3 must read the primary-constructor param's annotations, not just the field's.
-  `generateFields` / `@moka` is strictly BSON-focused (inspecting only `@BsonProperty` and `@bsonField`),
-  ignoring JSON annotations so Mongo queries are never polluted.
-  `generateBsonFields` / `@mokaBson` (object `BsonFields`) is an explicit BSON selector.
-  `generateJsonFields` / `@mokaJson` (object `JsonFields`) selects `@jsonField` (zio-json).
-  If annotations for the same target format disagree, compilation fails fast with an error.
-  On Scala 2.13, zio-json's `@jsonField` extends `Annotation` (not `StaticAnnotation`) so scalac 2.13
-  drops it across compilation runs (only visible within the same compilation unit). BSON annotations
-  survive across compilation runs on both Scala 2 and 3.
-- Existing companion members survive. A custom object name comes from `@moka("Name")` on
-  Scala 2, from the val name on Scala 3.
+  `generateFields`/`@moka` and `generateBsonFields`/`@mokaBson` read only BSON annotations;
+  `generateJsonFields`/`@mokaJson` only `@jsonField`. A `""` rename is absent (no rename, no
+  conflict). zio-bson's `@bsonField` and zio-json's `@jsonField` extend plain `Annotation`, so
+  **scalac 2.13 does not write them into classfiles** (the Java and mongo-scala `@BsonProperty` survive: Java / `StaticAnnotation`) —
+  the reason for nested composition below.
+- Existing companion members survive; one named like a generated object is an error. A custom
+  object name comes from `@moka("Name")` on Scala 2, from the val name on Scala 3.
 - The root `Fields` deliberately has **no** `path` member, so a field actually named `path`
   cannot collide with the accessor.
 
@@ -142,6 +144,18 @@ a real nested object extending `FieldPath` on Scala 2, a recursive `Refinement` 
   `Option` does not, and the operators do not nest.
 - Descent stops at value classes, at `Map`, and at any type already on the path. Removing that
   cycle guard gives a compiler `StackOverflowError` on both versions.
+
+**Nested composition** (ADR `specs/specs/2026-10-16-nested-composition-design.md`, ships as
+0.2.0, breaking on 2.13). Every generated root carries one marker (`MokaBsonNames`,
+`MokaJsonNames`, or neutral `MokaNames` = nothing renamed anywhere). On **2.13**, descending into a
+non-generic case class `N` does not re-read `N`'s annotations (lost from classfiles): it looks up
+`N`'s companion object with the matching or neutral marker and copies its literals, re-prefixed.
+Shape (where descent stops) still comes from the outer. No such object → `moka:` error;
+`-Xmacro-settings:moka.descendUnannotated` reads annotations anyway with a warning (the only way
+for generic `N`). Composed initializers are spelled `N.Obj.member` so zinc records the dependency —
+except for empty-package types, which have no stable path. **Scala 3 never composes**: TASTy keeps
+all annotations; it only emits the markers. The 2.13 code lives in `MokaExpander.scala`;
+`Moka.scala` is the public surface.
 
 ### Docs pipeline
 
@@ -171,9 +185,15 @@ typo-doesn't-compile demo.
   order is irrelevant. Top-level types in the same file, and types in other files, resolve
   fine. moka aborts with a diagnostic rather than degrading to a leaf. Mutually recursive
   models cannot be expanded at all on Scala 2 (re-entrant expansion → `StackOverflowError`).
-- **zinc does not always invalidate `examples` when only a macro body changes.** If a macro
-  edit seems to have no effect, run
-  `sbt "++<ver>; macros/clean; examples/clean; <task>"` before concluding the logic is wrong.
+- **sbt 2 restores stale compile outputs from its cache, even after `clean`.** Outputs live in
+  the content-addressed `~/.cache/sbt/v2/cas` (`target/out/**` are symlinks into it), and the
+  cache key does not notice that an in-build macro changed. After a macro edit, tests can run
+  against `examples` classes expanded by the *old* macro — `macros/clean; examples/clean` is not
+  enough. Force a fresh cache:
+  `sbt "set Global / localCacheDirectory := file(\"/tmp/sbtcache-$(date +%s)\"); +clean; +testFull"`.
+- **sbt-git's JGit cannot read a linked git worktree**: sbt fails to load in one unless a local,
+  untracked `.sbt` file sets
+  `ThisBuild / com.github.sbt.git.SbtGit.GitKeys.useConsoleForROGit := true`.
 - `.scalafmt.conf` runs the `scala3` dialect globally with a `fileOverride` switching
   `src/{main,test}/scala-2/**` to `scala213source3`. New Scala-2-only sources must live under a
   `scala-2` directory or scalafmt mis-parses them.

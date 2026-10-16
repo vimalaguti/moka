@@ -63,10 +63,10 @@ object Apple {
 ```
 
 ## Renaming annotations
- 
+
 Fields annotated with `@BsonProperty` (mongo-scala-bson) or `@bsonField`
 (zio-bson) keep their Scala name but carry the annotated wire name as value:
- 
+
 ```scala
 @moka
 case class Fruit(@BsonProperty("c") color: String, @bsonField("w") weight: Double)
@@ -106,9 +106,14 @@ A field whose type is another case class becomes a path node exposing that
 type's fields, each carrying the dotted path MongoDB expects:
 
 ```scala
-case class Engine(power: Int)
 @moka
-case class Car(engine: Engine)
+case class Engine(power: Int)
+object Engine {
+  val Fields = generateFields[Engine]
+}
+
+@moka
+case class Car(engine: Engine, wheels: List[Engine])
 object Car {
   val Fields = generateFields[Car]
 }
@@ -121,16 +126,19 @@ Car.Fields.engine._path == "engine"
 A collection of case classes also exposes MongoDB's array operators:
 
 ```scala
-case class Bike(wheels: List[Engine])
-
-Bike.Fields.wheels._matched.power == "wheels.$.power"   // positional $
-Bike.Fields.wheels._all.power     == "wheels.$[].power" // $[]
+Car.Fields.wheels._matched.power == "wheels.$.power"   // positional $
+Car.Fields.wheels._all.power     == "wheels.$[].power" // $[]
 ```
 
 Every generated member starts with an underscore (`_path`, `_matched`, `_all`),
-so it can never collide with a field of your own. On Scala 2 the nested type must
-be declared outside the enclosing object — see the
-[cross-compilation](docs/cross.md) page.
+so it can never collide with a field of your own.
+
+**On Scala 2.13 — and so in cross-compiled sources — every nested case class
+needs its own moka object** (since 0.2.0), as `Engine` has above: the outer
+object takes the nested names from it, which is what keeps zio-bson and
+zio-json renames correct across modules, jars and incremental builds. Without
+one, compilation fails and says what to add. Scala 3 needs none. See the
+[Scala 2](docs/scala2.md#nested-fields) page for the details and the opt-out.
 
 ## Usage idea
 

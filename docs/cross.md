@@ -66,25 +66,60 @@ The shared test suite runs identical sources under both versions:
 
 ## Nested types on Scala 2
 
-Descending into a nested case class needs that type's field list, and on
-Scala 2 the `@moka` annotation expands *before* the typer runs. A type declared
-as a member of the **same enclosing object or class** as the annotated case
-class is invisible to the macro, which fails with an error naming it:
+Cross-compiled sources must follow two Scala 2.13 rules that Scala 3 does not
+have.
+
+**Every nested case class needs its own moka object** (since 0.2.0). On 2.13
+the outer object takes the nested type's names from that object rather than
+from its annotations, because scalac 2.13 drops zio-bson's `@bsonField` and
+zio-json's `@jsonField` from classfiles — reading them again from another
+module, a jar or after an incremental build would silently lose the rename.
+Give the nested type the same `@moka` + placeholder pair, of the outer's format
+(`generateJsonFields` under a `@mokaJson` outer; a type with no renames at all
+is valid for every format):
+
+```scala
+@moka
+case class Engine(@bsonField("hp") power: Int)
+object Engine {
+  val Fields = generateFields[Engine]
+}
+
+@moka
+case class Car(engine: Engine)
+object Car {
+  val Fields = generateFields[Car]
+}
+
+Car.Fields.engine.power == "engine.hp"
+```
+
+The object is found by its format, not its name, so any val name works.
+Without one, 2.13 fails with `moka: nested type Engine has no BSON moka
+object, ...`. Value classes and plain values such as `String` are
+leaves and never need one. See [Scala 2](scala2.md#nested-fields) for generic
+nested types and the opt-out.
+
+**The nested type may not be declared beside the annotated class.** The `@moka`
+annotation expands *before* the typer runs, so a type declared as a member of
+the **same enclosing object or class** as the annotated case class is invisible
+to the macro, which fails with an error naming it:
 
 ```scala
 object Model {
-  case class Engine(power: Int)
+  @moka case class Engine(power: Int)
+  object Engine { val Fields = generateFields[Engine] }
+
   @moka case class Car(engine: Engine) // error on Scala 2: Engine is not visible
   object Car { val Fields = generateFields[Car] }
 }
 ```
 
-Declaring the nested type at package level, or in another file, is all that is
-needed. Scala 3 has no such restriction, so this is the shape to use in
-cross-compiled sources:
+Declare the nested type at package level, or in another file:
 
 ```scala
-case class Engine(power: Int)
+@moka case class Engine(power: Int)
+object Engine { val Fields = generateFields[Engine] }
 
 object Model {
   @moka case class Car(engine: Engine) // fine on both
