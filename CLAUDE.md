@@ -23,14 +23,12 @@ sbt bloopInstall                                # .bloop/ is gitignored; regener
 MOKA_DEBUG=1 sbt compile                        # Scala 3: print post-inlining trees
 ```
 
-Modules: `macros` (the library, `name := "moka"`), `examples` (demo + most tests),
-`examplesOptOut` (`examples-opt-out/`, 2.13-only sources compiled with the opt-out, which is
-global to a compilation — hence its own project), `docs` (rooted at `moka-docs/`, mdoc +
-Docusaurus + ghpages), `bench`, `benchJmh`. **The build root is sbt's synthesized `moka-root`,
-which aggregates every project**: `lazy val root` lives in `./root/`, so its
-`.aggregate(...)` list is decorative. `+testFull` therefore compiles `bench-jmh` (and
-`bench/`, when its git-ignored generated sources exist) on all three versions — their models must obey the
-2.13 nested-object rule too. mdoc is still not run by CI.
+Modules: `root` (aggregates `macros`, `examples`, `examplesOptOut`), `macros` (the library,
+`name := "moka"`), `examples` (demo + most tests), `examplesOptOut` (`examples-opt-out/`,
+2.13-only sources compiled with the opt-out, which is global to a compilation — hence its own
+project), `docs` (rooted at `moka-docs/`, mdoc + Docusaurus + ghpages). `bench` and `benchJmh`
+are not aggregated, so CI never builds them. `root` must stay `.in(file("."))`: without it sbt
+synthesizes a root that aggregates *every* project, which is how CI once compiled the benches.
 
 **Three sbt 2 shapes that silently do the wrong thing:**
 

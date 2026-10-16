@@ -58,6 +58,7 @@ lazy val scalacOptionsCommon = Seq(
 )
 
 lazy val root = project
+  .in(file("."))
   .settings(
     crossScalaVersions := Nil,
     publish / skip     := true,
