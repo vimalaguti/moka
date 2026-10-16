@@ -6,7 +6,8 @@
   branch B: nested case-class fields per level (B=3 approximates what an array
             hop costs once `matched`/`all` triple each element subtree)
 
-Types are emitted at package level, which the Scala 2 macro requires.
+Types are emitted at package level, which the Scala 2 macro requires, and each
+carries @moka plus a placeholder, which Scala 2.13 requires of nested types.
 """
 import sys, os, pathlib
 
@@ -27,13 +28,13 @@ for level in range(D, -1, -1):
             for b in range(B):
                 child = f"L{level + 1}_{idx * B + b}"
                 params.append(f"n{b}: {child}")
-        if level == 0:
-            lines.append("@moka")
+        # Every level carries its own object: on Scala 2.13 a nested type
+        # without one is a compile error (outer objects compose from it).
+        lines.append("@moka")
         lines.append(f"final case class {name}({', '.join(params)})")
-        if level == 0:
-            lines.append(f"object {name} {{")
-            lines.append(f"  val Fields = generateFields[{name}]")
-            lines.append("}")
+        lines.append(f"object {name} {{")
+        lines.append(f"  val Fields = generateFields[{name}]")
+        lines.append("}")
         lines.append("")
 
 # One use site, so the refinement is actually selected through.
