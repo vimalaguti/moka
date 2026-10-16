@@ -131,9 +131,7 @@ marker included, is readable from another file or later in the same file.
 ### Invariants
 
 - Generated code is still constant-folded; `N`'s object is referenced by type
-  only. Whether that makes incremental compilation recompile users when a
-  rename in `N` changes is unverified — on both versions — and is a test-plan
-  item, not a guarantee.
+  only.
 - Every generated member is underscore-prefixed; markers add no members. A
   leading underscore is never interpreted (Mongo `_id` is a user field).
 - All moka errors start with `moka:` and name the type, the format and the fix.
@@ -155,5 +153,12 @@ marker included, is readable from another file or later in the same file.
   overflows the stack, as before).
 - Generic `N` is never composed. Reading objects produced by Scala 3 from 2.13
   (`-Ytasty-reader`) is out of scope.
+- **Stale names after incremental builds — accepted, documented on the
+  website.** zinc does not treat a change to a renaming annotation as an API
+  change, so users of `N` in other files keep the old literal until a clean
+  build (verified on 3.3.8, within a module and from tests). Fixing it on Scala
+  3 would need a dependency on `N`'s companion, which composition there rules
+  out (`CyclicReference`). Users are told to clean-build after changing a
+  rename.
 - Moka matches annotations by simple name, so it cannot treat the Scala and
   Java `BsonProperty` differently.
