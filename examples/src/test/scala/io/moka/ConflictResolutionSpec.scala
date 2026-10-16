@@ -118,8 +118,18 @@ class ConflictResolutionSpec extends munit.FunSuite {
 
   test("nested zio-bson @bsonField from an earlier compile run renames field") {
     assertEquals(ZioBsonCrossRunOuter.Fields.inner.a, "inner.zr")
+    // Through compileErrors: on 2.13 a wrong literal type would otherwise break
+    // the whole suite's compilation instead of failing this test.
+    assertEquals(
+      compileErrors(
+        """val a: "inner.zr" = ZioBsonCrossRunOuter.Fields.inner.a"""
+      ),
+      ""
+    )
   }
 
+  // The nested types now carry their own moka object, so on 2.13 this pins
+  // that the Java @BsonProperty names reach the outer through composition.
   test("nested Java @BsonProperty from an earlier compile run renames field") {
     assertEquals(JavaCrossRunOuter.Fields.p.a, "p.jp")
     assertEquals(JavaCrossRunOuter.Fields.n.a, "n.jn")

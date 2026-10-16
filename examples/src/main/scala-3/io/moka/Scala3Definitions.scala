@@ -57,3 +57,35 @@ object Scala3Definitions {
     val JsonFields = generateJsonFields[S3FormatJson]
   }
 }
+
+/** Scala 3 never composes: a nested type without any moka object, read from the
+  * test run through TASTy, still yields its renamed names.
+  */
+final case class S3PlainRenamedInner(
+    @bsonField("zb") a: String,
+    @zio.json.jsonField("zj") b: String
+)
+
+/** A two-type cycle where both sides have their own object. Shape is decided by
+  * the outer's path, so `S3CycleOuter.Fields.n.o` is a leaf.
+  */
+final case class S3CycleOuter(n: S3CycleN, x: Int)
+object S3CycleOuter {
+  val Fields = generateFields[S3CycleOuter]
+}
+final case class S3CycleN(o: S3CycleOuter, y: Int)
+object S3CycleN {
+  val Fields = generateFields[S3CycleN]
+}
+
+/** Opaque types are leaves, even over a case class. */
+object S3Opaques {
+  opaque type Code = String
+  object Code {
+    def apply(s: String): Code = s
+  }
+  opaque type Boxed = S3PlainRenamedInner
+  object Boxed {
+    def apply(i: S3PlainRenamedInner): Boxed = i
+  }
+}

@@ -9,9 +9,15 @@ import zio.bson.bsonField
   * explicit companion with `val Fields = generateFields[T]`.
   */
 /** Package level, so the annotation macro can resolve it (it cannot see types
-  * declared beside the annottee).
+  * declared beside the annottee). `@moka` alone generates the companion whose
+  * object the outer types below compose.
   */
+@moka
 final case class S2Nested(@BsonProperty("z") deep: Int)
+
+/** Deliberately without a moka object: its conflict is never re-read through an
+  * outer type, which reports the missing object instead.
+  */
 final case class S2NestedConflictInner(
     @org.mongodb.scala.bson.annotations.BsonProperty("b1")
     @org.bson.codecs.pojo.annotations.BsonProperty("b2")

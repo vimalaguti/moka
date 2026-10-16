@@ -19,7 +19,12 @@ object Fruit {
   val JsonFields = generateJsonFields[Fruit]
 }
 
+// Needs its own JSON object: on Scala 2.13 FruitBasket composes it.
+@mokaJson
 final case class Nutrition(@jsonField("cal") calories: Int)
+object Nutrition {
+  val JsonFields = generateJsonFields[Nutrition]
+}
 
 @mokaJson
 final case class FruitBasket(

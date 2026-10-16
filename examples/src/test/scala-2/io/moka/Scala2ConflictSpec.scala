@@ -30,10 +30,15 @@ object S2Agreeing {
   val Fields = generateFields[S2Agreeing]
 }
 
+// One object per format: S2LocalOuter composes it in both.
 @moka
 final case class S2LocalInner(
     @BsonProperty("b_val") @jsonField("j_val") v: String
 )
+object S2LocalInner {
+  val Fields     = generateFields[S2LocalInner]
+  val JsonFields = generateJsonFields[S2LocalInner]
+}
 
 @moka
 final case class S2LocalOuter(inner: S2LocalInner)
@@ -98,15 +103,26 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(S2LocalOuter.JsonFields.inner.v, "inner.j_val")
   }
 
+  // An outer type no longer re-reads a nested type's annotations, so the
+  // conflict in S2NestedConflictInner can only surface when that type's own
+  // moka object is generated; through the outer, the missing object is reported.
   test("conflict inside nested type fails compilation (Scala 2)") {
     val errors = compileErrors("""
       @moka case class OuterBad(inner: S2NestedConflictInner)
     """)
-    assert(errors.contains("conflicting BSON renaming annotations"), errors)
-    assert(
-      errors.contains("OuterBad"),
-      s"Expected error position to point to OuterBad source line, but got: '$errors'"
-    )
+    assert(errors.contains("moka:"), errors)
+    assert(errors.contains("S2NestedConflictInner"), errors)
+    assert(errors.contains("moka.descendUnannotated"), errors)
+    assert(!errors.contains("conflicting"), errors)
+    val own = compileErrors("""
+      @moka case class InnerBad(
+        @org.mongodb.scala.bson.annotations.BsonProperty("b1")
+        @org.bson.codecs.pojo.annotations.BsonProperty("b2")
+        name: String
+      )
+      object InnerBad { val Fields = generateFields[InnerBad] }
+    """)
+    assert(own.contains("conflicting BSON renaming annotations"), own)
   }
 
   test("definitions from Scala2Definitions") {
@@ -119,11 +135,13 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(SharedOuterDual.JsonFields.inner.code, "inner.j_code")
   }
 
+  // Was "drops zio-json @jsonField" with "inner.code": composition reads the
+  // name from SharedNestedDual.JsonFields, built where @jsonField was visible.
   test(
-    "nested type from earlier compile run drops zio-json @jsonField on Scala 2"
+    "nested type from earlier compile run keeps zio-json @jsonField on Scala 2"
   ) {
     assertEquals(S2TestOwner.BsonFields.inner.code, "inner.b_code")
-    assertEquals(S2TestOwner.JsonFields.inner.code, "inner.code")
+    assertEquals(S2TestOwner.JsonFields.inner.code, "inner.j_code")
   }
 
   test("Java BsonProperty supports nested types in Scala 2") {
@@ -155,7 +173,10 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(S2StackedCustomNames.Bson.name, "b")
     assertEquals(S2StackedCustomNames.Json.name, "j")
     val errors = compileErrors("S2StackedCustomNames.JsonFields")
-    assert(errors.contains("JsonFields"), "unrequested JsonFields was generated")
+    assert(
+      errors.contains("JsonFields"),
+      "unrequested JsonFields was generated"
+    )
   }
 
   test("@moka(name = ...) accepts a named argument") {
@@ -166,17 +187,24 @@ class Scala2ConflictSpec extends munit.FunSuite {
     assertEquals(errors, "")
   }
 
-  test("a hand-written companion object Fields is reported, not silently kept") {
+  test(
+    "a hand-written companion object Fields is reported, not silently kept"
+  ) {
     val errors = compileErrors("""
       @moka case class HandWritten(a: Int)
       object HandWritten { object Fields { val custom = 1 } }
       HandWritten.Fields.custom
     """)
+    assert(errors.contains("moka:"), errors)
     assert(errors.contains("Fields"), errors)
   }
 }
 
+@moka
 case class S2JavaInner(
     @org.bson.codecs.pojo.annotations.BsonProperty("inner_renamed")
     f: String
 )
+object S2JavaInner {
+  val Fields = generateFields[S2JavaInner]
+}
