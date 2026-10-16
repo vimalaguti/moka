@@ -36,9 +36,11 @@ Using it on something that is not a case class is a compile error:
 generateFields[String]
 ```
 
-Nested types may be declared anywhere, including beside the annotated class —
-the Scala 2 restriction described on the [cross-compilation](cross.md) page does
-not apply here:
+Nested types need no moka object of their own — Scala 3 reads their annotations
+from TASTy, which keeps them all — and may be declared anywhere, including beside
+the class that uses them. Neither Scala 2 rule on the
+[cross-compilation](cross.md#nested-types-on-scala-2) page applies here, unless
+the same sources also build on 2.13:
 
 ```scala mdoc
 object Bicycle {

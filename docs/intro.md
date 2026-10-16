@@ -43,6 +43,10 @@ Car.Fields.engine.power
 Car.Fields.wheels._matched.power
 ```
 
+That is Scala 3, which needs nothing more. On Scala 2.13 — and in cross-compiled
+sources — `Engine` needs its own `@moka` object too; see
+[Scala 2](scala2.md#nested-fields).
+
 Head over to [Features](features.md) for what the generated `Fields` object
 can do.
 
@@ -86,6 +90,10 @@ Without it the annotation is silently left in place, no `Fields` object is
 generated, and every selection fails with `value <field> is not a member of
 io.moka.FieldsNotGenerated_AddYmacroAnnotations`. That error name is the
 reminder: the flag is missing.
+:::
+
+:::note[Upgrading a 2.13 build to 0.2.0]
+Nested case classes now need their own moka object — see [Scala 2](scala2.md#nested-fields).
 :::
 
 Published to Maven Central, so no extra resolver is needed.

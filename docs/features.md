@@ -53,7 +53,8 @@ object Renamed {
 Renamed.Params.a
 ```
 
-(On Scala 2 the name is passed to the annotation instead: `@moka("Params")`.)
+(On Scala 2 the name is passed to the annotation instead: `@moka("Params")`
+or `@moka(name = "Params")`.)
 
 ## Wire format annotations
 
@@ -81,7 +82,8 @@ Fruit.Fields.weight
 moka does **not** depend on any of these libraries: it matches annotations by
 simple name (`BsonProperty`, `bsonField`), so whichever ones are
 already on your classpath work automatically, and moka adds no dependencies of
-its own. See [Dependencies](intro.md#dependencies).
+its own. See [Dependencies](intro.md#dependencies). A rename with an empty value
+(`@bsonField("")`) is ignored: the field keeps its Scala name.
 
 ### JSON and explicit format selectors
 
@@ -108,6 +110,24 @@ Dual.JsonFields.color
 
 - **Supported JSON annotations**: `@jsonField` (zio-json), matched by simple name without runtime dependencies.
 - **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
+
+### Format markers
+
+Every generated object says which format its names are valid for, through one
+of three marker traits: `MokaBsonNames` (`generateFields`, `generateBsonFields`,
+`@moka`, `@mokaBson`), `MokaJsonNames` (`generateJsonFields`, `@mokaJson`), or
+the neutral `MokaNames` when no field — nested ones included — is renamed by any
+format, so the names are the same everywhere:
+
+```scala mdoc
+val neutral: MokaNames   = Apple.Fields
+val bson: MokaBsonNames  = Fruit.Fields
+val json: MokaJsonNames  = Dual.JsonFields
+```
+
+On Scala 2.13 this is how an outer object finds the right object of a nested
+type; you can also use them to require names of a given format in your own
+signatures.
 
 ## Nested fields
 
@@ -208,8 +228,9 @@ compiling rather than silently matching nothing.
 
 Descent stops at value classes (stored flattened, so the path is the outer
 field's), at `Map` (naming a value needs a key), and at any type already on the
-path, so recursive models terminate. On Scala 2 there is one extra rule about
-where the nested type may be declared — see
+path, so recursive models terminate. On Scala 2.13 — and so in cross-compiled
+sources — every nested case class needs its own moka object, and may not be
+declared beside the annotated class — see
 [cross-compilation](cross.md#nested-types-on-scala-2).
 
 ## Using a node as a string
@@ -266,3 +287,21 @@ collection.updateOne(
   Updates.set(Fruit.Fields.weight, 0.3)
 )
 ```
+
+## Known limitations
+
+### Stale names after changing a rename
+
+Incremental compilation (sbt, Metals, Bloop) does not treat a change to a
+renaming annotation as a change of the type's API. After you add, change or
+remove a `@BsonProperty`, `@bsonField` or `@jsonField`, an outer type declared
+in **another file** that nests the changed type may keep the old name until that
+file is recompiled:
+
+- **Scala 3** — always the case.
+- **Scala 2.13** — handled: the outer object refers to the nested type's own
+  moka object, so the outer file is recompiled. Except for types in the empty
+  package (no `package` clause) and types read through the
+  `moka.descendUnannotated` opt-out.
+
+**Do a clean build after changing a rename**, and always release from one.
