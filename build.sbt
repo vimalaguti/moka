@@ -63,7 +63,7 @@ lazy val root = project
     publish / skip     := true,
     addCommandAlias("run", "examples/run")
   )
-  .aggregate(examples, macros)
+  .aggregate(examples, examplesOptOut, macros)
 
 lazy val examples = project
   .settings(scalacOptionsCommon)
@@ -75,6 +75,31 @@ lazy val examples = project
       .cross(CrossVersion.for3Use2_13),
     // Pinned: 1.0.7 is built on Scala 3.4 and 1.0.8 on 3.5.2, so neither can be
     // read by the 3.3 LTS compiler (TASTy 28.5 vs the 28.3 it expects).
+    libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
+    libraryDependencies += "dev.zio"       %% "zio-json" % "1.0.0",
+    libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test
+  )
+  .dependsOn(macros)
+
+/** The 2.13 opt-out `-Xmacro-settings:moka.descendUnannotated` is global to a
+  * compilation, so it gets its own project rather than switching off the
+  * missing-object error for every test in `examples`. Its sources are all
+  * 2.13-only: on Scala 3 it compiles nothing and runs no tests.
+  */
+lazy val examplesOptOut = project
+  .in(file("examples-opt-out"))
+  .settings(scalacOptionsCommon)
+  .settings(
+    crossScalaVersions := supportedScalaVersions,
+    publish / skip     := true,
+    Compile / scalacOptions ++= {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 13)) => List("-Xmacro-settings:moka.descendUnannotated")
+        case _             => Nil
+      }
+    },
+    libraryDependencies += ("org.mongodb.scala" %% "mongo-scala-bson" % "5.5.1")
+      .cross(CrossVersion.for3Use2_13),
     libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
     libraryDependencies += "dev.zio"       %% "zio-json" % "1.0.0",
     libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test
