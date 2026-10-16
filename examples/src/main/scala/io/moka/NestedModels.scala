@@ -7,12 +7,23 @@ import zio.bson.bsonField
   *
   * They live at package level, not inside an object, because the Scala 2
   * annotation macro runs before the typer and cannot resolve a type declared as
-  * a member of the same enclosing object as the annotated case class. Note that
-  * only the outermost class needs `@moka`.
+  * a member of the same enclosing object as the annotated case class.
+  *
+  * Every descendable nested type carries its own `@moka` and placeholder: on
+  * Scala 2.13 an outer type takes a nested type's names from that type's own
+  * generated object (`specs/specs/2026-10-16-nested-composition-design.md`).
   */
+@moka
 final case class Level3(@BsonProperty("z") deep: Int)
+object Level3 {
+  val Fields = generateFields[Level3]
+}
 
+@moka
 final case class Level2(c: Int, three: Level3)
+object Level2 {
+  val Fields = generateFields[Level2]
+}
 
 @moka
 final case class Level1(@bsonField("r") renamed: Level2, plain: String)
@@ -42,7 +53,11 @@ object Wrapped {
 }
 
 /** Collection fields additionally expose MongoDB's array operators. */
+@moka
 final case class BasketItem(@BsonProperty("q") qty: Int, note: String)
+object BasketItem {
+  val Fields = generateFields[BasketItem]
+}
 
 @moka
 final case class Basket(
@@ -75,7 +90,11 @@ object Bag {
 }
 
 /** An array inside an array: operators must be available at both levels. */
+@moka
 final case class Row(cells: List[BasketItem])
+object Row {
+  val Fields = generateFields[Row]
+}
 
 @moka
 final case class Grid(rows: List[Row])

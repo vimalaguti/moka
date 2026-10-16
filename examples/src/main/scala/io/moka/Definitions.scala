@@ -42,19 +42,33 @@ object SharedJavaBson {
 
 /** Nested type compiled in the `examples` main run, so suites in the test run
   * see it only through its classfile — where scalac 2.13 has dropped zio-bson's
-  * `@bsonField`, a plain (non-`StaticAnnotation`) `Annotation`.
+  * `@bsonField`, a plain (non-`StaticAnnotation`) `Annotation`. Its own
+  * generated object, built in this run, carries the name across.
   */
+@moka
 final case class SharedZioBsonInner(@bsonField("zr") a: String)
+object SharedZioBsonInner {
+  val Fields = generateFields[SharedZioBsonInner]
+}
 
 /** Java-driver `@BsonProperty` is a Java annotation, so scalac 2.13 keeps it in
-  * the classfile; read from the test run, both argument forms must survive.
+  * the classfile; both argument forms must survive into the generated object an
+  * outer type in the test run composes.
   */
+@moka
 final case class SharedJavaInnerPositional(
     @org.bson.codecs.pojo.annotations.BsonProperty("jp") a: String
 )
+object SharedJavaInnerPositional {
+  val Fields = generateFields[SharedJavaInnerPositional]
+}
+@moka
 final case class SharedJavaInnerNamed(
     @org.bson.codecs.pojo.annotations.BsonProperty(value = "jn") a: String
 )
+object SharedJavaInnerNamed {
+  val Fields = generateFields[SharedJavaInnerNamed]
+}
 
 case class A(value: Int) extends AnyVal
 
