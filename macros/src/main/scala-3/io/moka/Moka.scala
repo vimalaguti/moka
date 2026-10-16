@@ -48,6 +48,11 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   val bsonAnnotations = Set("BsonProperty", "bsonField")
   val jsonAnnotations = Set("jsonField")
 
+  /** Whether any field built into the object carries a renaming annotation of
+    * any format (spec rule 1); decides the neutral marker.
+    */
+  var renamed = false
+
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =
       owner.primaryConstructor.paramSymss.flatten.find(_.name == field.name)
@@ -63,9 +68,14 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
           .orElse(extractStringArg(fun))
       case _ => None
 
+    // An empty value counts as no annotation at all (spec rule 5).
     val extracted = allAnnotations.flatMap { ann =>
-      extractStringArg(ann).map(v => (ann.tpe.typeSymbol.name, v))
+      val name = ann.tpe.typeSymbol.name
+      if bsonAnnotations(name) || jsonAnnotations(name) then
+        extractStringArg(ann).filter(_.nonEmpty).map(v => (name, v))
+      else None
     }.distinct
+    if extracted.nonEmpty then renamed = true
 
     val filtered = mode match
       case RenamingMode.BsonOnly =>
@@ -146,19 +156,38 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
       else Nil
     val members = entries ++ arrayOps
 
-    val base =
-      if prefix.isEmpty then TypeRepr.of[FieldNames]
-      else pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
-    val refined = members.foldLeft(base) { case (acc, (name, tpe, _)) =>
-      Refinement(acc, name, tpe)
-    }
-
     val children = Expr.ofList(members.map { case (name, _, value) =>
       '{ (${ Expr(name) }, $value) }
     })
-    val node =
-      if prefix.isEmpty then '{ FieldNames($children.toMap) }
-      else '{ PathNode(${ Expr(prefix) }, $children.toMap) }
+    // Only the root carries a marker. Every descendant is built above, so
+    // `renamed` is final by the time the root reads it.
+    val (base, node) =
+      if prefix.isEmpty then
+        if !renamed then
+          (
+            TypeRepr.of[FieldNames & MokaNames],
+            '{ FieldNames.neutral($children.toMap) }
+          )
+        else
+          mode match
+            case RenamingMode.BsonOnly =>
+              (
+                TypeRepr.of[FieldNames & MokaBsonNames],
+                '{ FieldNames.bson($children.toMap) }
+              )
+            case RenamingMode.JsonOnly =>
+              (
+                TypeRepr.of[FieldNames & MokaJsonNames],
+                '{ FieldNames.json($children.toMap) }
+              )
+      else
+        (
+          pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix))),
+          '{ PathNode(${ Expr(prefix) }, $children.toMap) }
+        )
+    val refined = members.foldLeft(base) { case (acc, (name, tpe, _)) =>
+      Refinement(acc, name, tpe)
+    }
     (refined, node)
 
   val (refined, node) =
