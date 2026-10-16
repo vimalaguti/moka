@@ -1,0 +1,704 @@
+package io.moka
+
+import scala.reflect.macros.whitebox
+
+private[moka] object MokaExpander {
+
+  /** Names read off a generated moka object: the root has path `""`, and every
+    * literal is relative to the type the object was generated for.
+    */
+  sealed trait Names {
+    def literal: String
+  }
+  final case class NLeaf(literal: String) extends Names
+  final case class NNode(literal: String, members: Map[String, Names])
+      extends Names
+}
+
+/** The Scala 2.13 expansion of `@moka`, `@mokaBson` and `@mokaJson`
+  * (`specs/specs/2026-10-16-nested-composition-design.md`).
+  *
+  * The annottee's own fields are read from its untyped parameters. A nested
+  * descendable type `N` is *composed*: its names come from the moka object
+  * `N`'s companion declares, built in the run that saw `N`'s annotations,
+  * because scalac 2.13 does not write zio-bson's `@bsonField` or zio-json's
+  * `@jsonField` into classfiles. Where nodes stop is still decided here, by the
+  * same rules as direct descent; only the literals come from `N`'s object.
+  */
+private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
+  import c.universe._
+  import MokaExpander._
+
+  private sealed trait Format {
+    def label: String
+    def annotation: String
+    def placeholder: String
+    def defaultObject: String
+    def renaming: Set[String]
+    def marker: ClassSymbol
+  }
+  private case object Bson extends Format {
+    val label         = "BSON"
+    val annotation    = "@moka"
+    val placeholder   = "generateFields"
+    val defaultObject = "Fields"
+    val renaming      = Set("BsonProperty", "bsonField")
+    lazy val marker   = c.mirror.staticClass("io.moka.MokaBsonNames")
+  }
+  private case object Json extends Format {
+    val label         = "JSON"
+    val annotation    = "@mokaJson"
+    val placeholder   = "generateJsonFields"
+    val defaultObject = "JsonFields"
+    val renaming      = Set("jsonField")
+    lazy val marker   = c.mirror.staticClass("io.moka.MokaJsonNames")
+  }
+
+  private lazy val neutralMarker = c.mirror.staticClass("io.moka.MokaNames")
+
+  private val allRenaming = Bson.renaming ++ Json.renaming
+  private val mokaAnnotations: Map[String, (Format, String)] = Map(
+    "moka"     -> ((Bson, "Fields")),
+    "mokaBson" -> ((Bson, "BsonFields")),
+    "mokaJson" -> ((Json, "JsonFields"))
+  )
+
+  private val optOut: Boolean = c.settings.exists { s =>
+    s == "moka.descendUnannotated" || s == "moka.descendUnannotated=true"
+  }
+
+  /** What one generated object depended on. */
+  private final class Acc {
+    var renamed: Boolean = false
+    val warned           = scala.collection.mutable.Set.empty[Symbol]
+  }
+
+  // ---------------------------------------------------------------------------
+  // Reading annotations
+
+  private def leafTypeName(tree: Tree): Option[String] = tree match {
+    case Ident(TypeName(name))     => Some(name)
+    case Select(_, TypeName(name)) => Some(name)
+    case _                         => None
+  }
+
+  private def findStringConstant(tree: Tree): Option[String] = tree match {
+    case Literal(Constant(v: String)) => Some(v)
+    case _ => tree.children.view.flatMap(findStringConstant).headOption
+  }
+
+  /** Renaming annotations as (simple name, value); an empty value is no
+    * annotation at all (spec rule 5).
+    */
+  private def renamesFromMods(mods: Modifiers): List[(String, String)] =
+    mods.annotations
+      .flatMap {
+        case tree @ Apply(Select(New(tpt), _), _) =>
+          leafTypeName(tpt)
+            .filter(allRenaming)
+            .flatMap(n => findStringConstant(tree).map(v => (n, v)))
+        case _ => None
+      }
+      .filter(_._2.nonEmpty)
+
+  private def renamesFromSymbol(sym: Symbol): List[(String, String)] = {
+    sym.info // force completion before reading annotations
+    sym.annotations
+      .flatMap { ann =>
+        val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
+        if (allRenaming(name)) findStringConstant(ann.tree).map(v => (name, v))
+        else None
+      }
+      .filter(_._2.nonEmpty)
+  }
+
+  private def resolveName(
+      pos: Position,
+      fallback: String,
+      renames: List[(String, String)],
+      format: Format
+  ): String = {
+    val matches  = renames.filter(r => format.renaming(r._1))
+    val distinct = matches.map(_._2).distinct
+    if (distinct.isEmpty) fallback
+    else if (distinct.length == 1) distinct.head
+    else {
+      val formatted =
+        matches.map { case (ann, v) => s"@$ann(\"$v\")" }.mkString(", ")
+      c.abort(
+        pos,
+        s"moka: conflicting ${format.label} renaming annotations on field '$fallback': $formatted."
+      )
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shape: the existing descent rules
+
+  private val optionSym   = c.mirror.staticClass("scala.Option")
+  private val iterableSym = c.mirror.staticClass("scala.collection.Iterable")
+  private val anyValTpe   = c.mirror.staticClass("scala.AnyVal").toType
+
+  /** `Option` and single-element collections are transparent: MongoDB's dot
+    * notation is the same whether a sub-document is optional, in an array, or
+    * neither. `Map` has two type arguments and is left alone.
+    *
+    * Returns the element type and whether a collection was crossed on the way
+    * to it, which is what decides whether the field gets the array operators.
+    */
+  private def unwrap(
+      t: Type,
+      sawCollection: Boolean = false
+  ): (Type, Boolean) = {
+    val d = t.dealias
+    if (d.typeArgs.size == 1 && d.typeSymbol == optionSym)
+      unwrap(d.typeArgs.head, sawCollection)
+    else if (d.typeArgs.size == 1 && d.baseClasses.contains(iterableSym))
+      unwrap(d.typeArgs.head, true)
+    else (d, sawCollection)
+  }
+
+  /** Case classes are descended into; value classes are not (a value class is
+    * stored flattened, so its path is the outer field's path).
+    */
+  private def isDescendable(t: Type): Boolean = {
+    val s = t.dealias.typeSymbol
+    s.isClass && s.asClass.isCaseClass && !(t.dealias <:< anyValTpe)
+  }
+
+  private def key(t: Type): String = t.typeSymbol.fullName
+
+  private def params(tpe: Type): List[Symbol] =
+    tpe.dealias.typeSymbol.asClass.primaryConstructor.asMethod.paramLists.headOption
+      .getOrElse(Nil)
+
+  private def pathOf(prefix: String, name: String): String =
+    if (prefix.isEmpty) name
+    else if (name.isEmpty) prefix
+    else prefix + "." + name
+
+  private def leaf(term: TermName, path: String): Tree =
+    ValDef(Modifiers(), term, tq"$path", q"$path")
+
+  /** A member whose literal is `N`'s object's literal `lit` re-prefixed with
+    * `base`. When `N`'s object has a stable path, the initializer spells it as
+    * `"base." + N.Obj.member`: the typer folds that to the same constant, and
+    * the attachment it leaves on the folded literal is where zinc finds the
+    * dependency on `N`'s object and the member's name. Without it, a rename in
+    * `N` would not recompile this file incrementally. The declared type stays
+    * the literal type, so selections still fold at use sites.
+    */
+  private def composedVal(
+      term: TermName,
+      base: String,
+      lit: String,
+      ref: Option[List[String]]
+  ): Tree = {
+    val path = pathOf(base, lit)
+    ref match {
+      case Some(r) if base.nonEmpty && lit.nonEmpty =>
+        ValDef(Modifiers(), term, tq"$path", q"${base + "."} + ${select(r)}")
+      case _ => leaf(term, path)
+    }
+  }
+
+  private def select(path: List[String]): Tree =
+    path.foldLeft(Ident(termNames.ROOTPKG): Tree)((q, n) =>
+      Select(q, TermName(n))
+    )
+
+  private def nodeObject(term: TermName, path: String, members: List[Tree]) =
+    nodeObjectWith(term, path, leaf(TermName("_path"), path), members)
+
+  private def nodeObjectWith(
+      term: TermName,
+      path: String,
+      pathMember: Tree,
+      members: List[Tree]
+  ) =
+    q"object $term extends _root_.io.moka.FieldPath[$path] { ..${pathMember :: members} }"
+
+  // ---------------------------------------------------------------------------
+  // Lookup of a nested type's object (spec rule 2)
+
+  private def isMarked(module: Symbol, marker: ClassSymbol): Boolean =
+    module.asModule.moduleClass.info.baseClasses.contains(marker)
+
+  private def literalOf(sym: Symbol): Option[String] =
+    sym.info.finalResultType match {
+      case ct: ConstantType =>
+        ct.value.value match {
+          case s: String => Some(s)
+          case _         => None
+        }
+      case _ => None
+    }
+
+  private def readObject(module: Symbol, root: Boolean): NNode = {
+    val decls = module.asModule.moduleClass.info.decls.toList
+    val path =
+      if (root) ""
+      else
+        decls
+          .find(d => d.isMethod && d.name.decodedName.toString == "_path")
+          .flatMap(literalOf)
+          .getOrElse("")
+    val members = decls.flatMap { d =>
+      val name = d.name.decodedName.toString
+      if (d.isModule) Some(name -> readObject(d, root = false))
+      else if (d.isMethod && d.asMethod.isGetter && name != "_path")
+        literalOf(d).map(l => name -> NLeaf(l))
+      else None
+    }
+    NNode(path, members.toMap)
+  }
+
+  /** The `_root_`-relative path of a module reachable through packages and
+    * objects only. Local and inner companions have none: their outer type is in
+    * the same file, so incremental compilation needs no reference.
+    */
+  private def staticPath(module: Symbol): Option[List[String]] = {
+    def loop(s: Symbol, acc: List[String]): Option[List[String]] =
+      if (s == c.mirror.RootClass) Some(acc)
+      else if (s == c.mirror.EmptyPackageClass || s == NoSymbol) None
+      else if (s.isPackageClass || s.isModuleClass)
+        loop(s.owner, s.name.decodedName.toString :: acc)
+      else None
+    loop(module.owner, List(module.name.decodedName.toString))
+  }
+
+  /** `N`'s own object for `format`: a module its companion declares, marked
+    * with the format's marker or the neutral one. Several identical ones are
+    * one; several that differ are an error.
+    */
+  private def lookup(
+      tpe: Type,
+      format: Format,
+      pos: Position,
+      acc: Acc
+  ): Option[(NNode, Option[List[String]])] = {
+    val cls = tpe.typeSymbol.asClass
+    if (cls.typeParams.nonEmpty) None
+    else {
+      val companion = cls.companion
+      if (companion == NoSymbol || !companion.isModule) None
+      else {
+        val candidates = companion.info.decls.toList.filter { d =>
+          d.isModule &&
+          (isMarked(d, format.marker) || isMarked(d, neutralMarker))
+        }
+        val read = candidates.map(m => (m, readObject(m, root = true)))
+        read.map(_._2).distinct match {
+          case Nil          => None
+          case names :: Nil =>
+            // prefer a neutral one: its names are the same, and it keeps the
+            // outer neutral
+            val (chosen, _) = read
+              .find(r => isMarked(r._1, neutralMarker))
+              .getOrElse(read.head)
+            if (!isMarked(chosen, neutralMarker)) acc.renamed = true
+            Some(
+              (
+                names,
+                staticPath(companion).map(_ :+ chosen.name.decodedName.toString)
+              )
+            )
+          case _ =>
+            c.abort(
+              pos,
+              s"moka: ambiguous ${format.label} names for nested type ${cls.name}: " +
+                s"its companion declares differing objects ${read.map(_._1.name.decodedName.toString).mkString(", ")}. " +
+                "Keep one, or make them identical."
+            )
+        }
+      }
+    }
+  }
+
+  private def missingObject(tpe: Type, format: Format, pos: Position) = {
+    val n = tpe.typeSymbol.name.decodedName.toString
+    val generic =
+      if (tpe.typeSymbol.asClass.typeParams.nonEmpty)
+        s" $n is generic, so it cannot carry one: use the opt-out."
+      else
+        s" Add ${format.annotation} to $n and `val ${format.defaultObject} = ${format.placeholder}[$n]` to its companion object" +
+          " (objects compiled by moka 0.1.x carry no marker: recompile them)."
+    c.abort(
+      pos,
+      s"moka: nested type $n has no ${format.label} moka object, and on Scala 2.13 its renaming annotations " +
+        "may be lost from its classfile." + generic +
+        " Or compile with -Xmacro-settings:moka.descendUnannotated to read its annotations anyway."
+    )
+  }
+
+  // ---------------------------------------------------------------------------
+  // Descent
+
+  /** A nested type where no enclosing object has been composed: compose its own
+    * object, or (opt-out) read its annotations.
+    */
+  private def descend(
+      term: TermName,
+      tpe: Type,
+      path: String,
+      seen: Set[String],
+      isArray: Boolean,
+      format: Format,
+      pos: Position,
+      acc: Acc
+  ): Tree =
+    lookup(tpe, format, pos, acc) match {
+      case Some((names, ref)) =>
+        composed(term, tpe, path, names, ref, seen, isArray, root = true, pos)
+      case None if optOut =>
+        val sym = tpe.typeSymbol
+        if (!acc.warned(sym)) {
+          acc.warned += sym
+          c.warning(
+            pos,
+            s"moka: reading the annotations of nested type ${sym.name.decodedName} directly " +
+              "(-Xmacro-settings:moka.descendUnannotated): renames scalac 2.13 dropped from its classfile " +
+              "(zio-bson @bsonField, zio-json @jsonField) are not seen. Give it its own moka object instead."
+          )
+        }
+        acc.renamed = true // never neutral under the opt-out
+        direct(term, tpe, path, seen, isArray, format, pos, acc)
+      case None => missingObject(tpe, format, pos)
+    }
+
+  /** Shape from the outer, names from `N`'s object: `names` is a node of it (at
+    * stable path `ref`, if any), every literal relative to `base`, the path `N`
+    * is composed at.
+    */
+  private def composed(
+      term: TermName,
+      tpe: Type,
+      base: String,
+      names: NNode,
+      ref: Option[List[String]],
+      seen: Set[String],
+      isArray: Boolean,
+      root: Boolean,
+      pos: Position
+  ): Tree = {
+    val n = tpe.typeSymbol.name.decodedName.toString
+    def mismatch(member: String) =
+      c.abort(
+        pos,
+        s"moka: the moka object of $n does not match its type at '$member': recompile $n with this moka version."
+      )
+    val members = params(tpe).map { p =>
+      val name         = p.name.decodedName.toString
+      val (pt, arr)    = unwrap(p.typeSignatureIn(tpe.dealias))
+      val found: Names = names.members.getOrElse(name, mismatch(name))
+      if (isDescendable(pt) && !seen(key(pt))) found match {
+        case node: NNode =>
+          composed(
+            TermName(name),
+            pt,
+            base,
+            node,
+            ref.map(_ :+ name),
+            seen + key(pt),
+            arr,
+            root = false,
+            pos
+          )
+        case _ => mismatch(name)
+      }
+      else {
+        val litRef = found match {
+          case _: NNode => ref.map(_ ::: List(name, "_path"))
+          case _        => ref.map(_ :+ name)
+        }
+        composedVal(TermName(name), base, found.literal, litRef)
+      }
+    }
+    val path = pathOf(base, names.literal)
+    val arrayOps =
+      if (!isArray) Nil
+      else if (root)
+        // an outer collection over N: compose N again under the operators
+        List("_matched" -> ".$", "_all" -> ".$[]").map { case (op, suffix) =>
+          composed(
+            TermName(op),
+            tpe,
+            path + suffix,
+            names,
+            ref,
+            seen,
+            isArray = false,
+            root = true,
+            pos
+          )
+        }
+      else
+        List("_matched", "_all").map { op =>
+          names.members.get(op) match {
+            case Some(node: NNode) =>
+              composed(
+                TermName(op),
+                tpe,
+                base,
+                node,
+                ref.map(_ :+ op),
+                seen,
+                isArray = false,
+                root = false,
+                pos
+              )
+            case _ => mismatch(op)
+          }
+        }
+    val pathMember =
+      if (root) leaf(TermName("_path"), path)
+      else
+        composedVal(
+          TermName("_path"),
+          base,
+          names.literal,
+          ref.map(_ :+ "_path")
+        )
+    nodeObjectWith(term, path, pathMember, members ::: arrayOps)
+  }
+
+  /** Reads a nested type's annotations, under the opt-out only. */
+  private def direct(
+      term: TermName,
+      tpe: Type,
+      path: String,
+      seen: Set[String],
+      isArray: Boolean,
+      format: Format,
+      pos: Position,
+      acc: Acc
+  ): Tree = {
+    val members = params(tpe).map { p =>
+      val fieldName = p.name.decodedName.toString
+      val ppos      = if (p.pos != NoPosition) p.pos else pos
+      val ppath =
+        pathOf(path, resolveName(ppos, fieldName, renamesFromSymbol(p), format))
+      val (pt, arr) = unwrap(p.typeSignatureIn(tpe.dealias))
+      if (isDescendable(pt) && !seen(key(pt)))
+        descend(
+          TermName(fieldName),
+          pt,
+          ppath,
+          seen + key(pt),
+          arr,
+          format,
+          pos,
+          acc
+        )
+      else leaf(TermName(fieldName), ppath)
+    }
+    val arrayOps =
+      if (!isArray) Nil
+      else
+        List("_matched" -> ".$", "_all" -> ".$[]").map { case (op, suffix) =>
+          direct(
+            TermName(op),
+            tpe,
+            path + suffix,
+            seen,
+            isArray = false,
+            format,
+            pos,
+            acc
+          )
+        }
+    nodeObject(term, path, members ::: arrayOps)
+  }
+
+  /** The members of one generated root object, from the annottee's untyped
+    * parameters.
+    */
+  private def fieldNames(
+      className: TypeName,
+      fields: List[ValDef],
+      format: Format,
+      acc: Acc
+  ): List[Tree] = {
+    val selfName = className.decodedName.toString
+    fields.map { vd =>
+      val fieldName = vd.name.decodedName.toString
+      val renames   = renamesFromMods(vd.mods)
+      if (renames.nonEmpty) acc.renamed = true
+      val path = resolveName(vd.pos, fieldName, renames, format)
+      val term = TermName(fieldName)
+      val tpt  = vd.tpt
+      // Typechecking a type that mentions the annottee would re-enter this very
+      // annotation expansion, so a self-reference is recognised syntactically
+      // and terminates as a leaf.
+      val mentionsSelf = tpt.exists {
+        case Ident(n)     => n.decodedName.toString == selfName
+        case Select(_, n) => n.decodedName.toString == selfName
+        case _            => false
+      }
+      if (mentionsSelf) leaf(term, path)
+      else {
+        val resolved = c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
+        if (resolved.isEmpty)
+          c.abort(
+            vd.pos,
+            s"moka: cannot resolve type '$tpt' of field '$fieldName' while expanding @moka on $selfName. " +
+              "On Scala 2 the annotation macro runs before the typer, so a type declared as a member of the " +
+              s"same enclosing object or class as the annotated case class is invisible to it. Move '$tpt' to " +
+              "package level or into another file."
+          )
+        val (ft, isArray) = unwrap(resolved.tpe)
+        if (isDescendable(ft))
+          descend(term, ft, path, Set(key(ft)), isArray, format, vd.pos, acc)
+        else leaf(term, path)
+      }
+    }
+  }
+
+  /** One generated root object: its members and its marker (spec rule 1). */
+  private def rootObject(
+      name: TermName,
+      className: TypeName,
+      fields: List[ValDef],
+      format: Format
+  ): Tree = {
+    val acc    = new Acc
+    val terms  = fieldNames(className, fields, format, acc)
+    val marker = if (acc.renamed) format.marker else neutralMarker
+    q"object $name extends ${marker} { ..$terms }"
+  }
+
+  // ---------------------------------------------------------------------------
+  // Companion rewriting (spec rule 6)
+
+  private def annotationParts(tree: Tree): Option[(String, List[Tree])] =
+    tree match {
+      case Apply(Select(New(tpt), _), args) =>
+        leafTypeName(tpt).filter(mokaAnnotations.contains).map(n => (n, args))
+      case _ => None
+    }
+
+  private def objectName(args: List[Tree], default: String): String =
+    args match {
+      case Nil                                 => default
+      case Literal(Constant(n: String)) :: Nil => n
+      case NamedArg(
+            Ident(TermName("name")),
+            Literal(Constant(n: String))
+          ) :: Nil =>
+        n
+      case Assign(
+            Ident(TermName("name")),
+            Literal(Constant(n: String))
+          ) :: Nil =>
+        n
+      case _ =>
+        c.abort(
+          c.enclosingPosition,
+          "moka: invalid annotation arguments: expected a string literal object name."
+        )
+    }
+
+  private def placeholderFormat(rhs: Tree): Option[Format] = rhs match {
+    case q"$_.generateFields[$_]"     => Some(Bson)
+    case q"generateFields[$_]"        => Some(Bson)
+    case q"$_.generateBsonFields[$_]" => Some(Bson)
+    case q"generateBsonFields[$_]"    => Some(Bson)
+    case q"$_.generateJsonFields[$_]" => Some(Json)
+    case q"generateJsonFields[$_]"    => Some(Json)
+    case _                            => None
+  }
+
+  def expand(annotation: String, annottees: Seq[Tree]): Tree = {
+    val (classDecl, companion) = annottees.toList match {
+      case (cd: ClassDef) :: Nil                    => (cd, None)
+      case (cd: ClassDef) :: (md: ModuleDef) :: Nil => (cd, Some(md))
+      case _ => c.abort(c.enclosingPosition, "moka: invalid annottee")
+    }
+    val ClassDef(classMods, className, _, classImpl) = classDecl
+    if (!classMods.hasFlag(Flag.CASE))
+      c.abort(
+        c.enclosingPosition,
+        s"moka: class $className is not a case class."
+      )
+    val firstParams: List[ValDef] = classDecl match {
+      case q"$_ class $_[..$_] $_(...$paramss) extends ..$_ { $_ => ..$_ }" =>
+        paramss.headOption.getOrElse(Nil)
+      case _ => c.abort(c.enclosingPosition, "moka: invalid class " + className)
+    }
+
+    // The whole stack is handled here: the annotation expanding now first, then
+    // the moka annotations still on the class, which are removed so they never
+    // expand on this output.
+    val current = c.prefix.tree match {
+      case Apply(_, args) => (annotation, args)
+      case _              => (annotation, Nil)
+    }
+    val (others, kept) =
+      classMods.annotations.partition(annotationParts(_).isDefined)
+    val stack = current :: others.flatMap(annotationParts)
+    val strippedClass = ClassDef(
+      Modifiers(classMods.flags, classMods.privateWithin, kept),
+      className,
+      classDecl.tparams,
+      classImpl
+    )
+
+    val (cMods, cParents, cSelf, cStats) = companion match {
+      case Some(q"$mods object $_ extends ..$parents { $self => ..$stats }") =>
+        (mods, parents, self, stats)
+      case _ => (Modifiers(), List(tq"_root_.scala.AnyRef"), noSelfType, Nil)
+    }
+
+    val placeholders = cStats.collect {
+      case q"$_ val $name: $_ = $rhs" if placeholderFormat(rhs).isDefined =>
+        name.decodedName.toString -> placeholderFormat(rhs).get
+    }
+    val generated: List[(String, Format)] =
+      if (placeholders.nonEmpty) placeholders
+      else
+        stack.map { case (ann, args) =>
+          val (format, default) = mokaAnnotations(ann)
+          objectName(args, default) -> format
+        }
+
+    val duplicates =
+      generated.groupBy(_._1).collect { case (n, l) if l.size > 1 => n }
+    if (duplicates.nonEmpty)
+      c.abort(
+        c.enclosingPosition,
+        s"moka: the stacked annotations on $className generate ${duplicates.mkString(", ")} more than once."
+      )
+
+    val generatedNames = generated.map(_._1).toSet
+    cStats.foreach {
+      case q"$_ val $name: $_ = $rhs" if placeholderFormat(rhs).isDefined => ()
+      case d: MemberDef
+          if d.name.isTermName && generatedNames(d.name.decodedName.toString) =>
+        c.abort(
+          d.pos,
+          s"moka: the companion of $className already defines ${d.name.decodedName}, which moka generates. " +
+            "Rename or remove it, or give the generated object another name."
+        )
+      case _ => ()
+    }
+
+    def build(name: String, format: Format) =
+      rootObject(TermName(name), className, firstParams, format)
+
+    val newStats =
+      if (placeholders.nonEmpty)
+        cStats.map {
+          case q"$_ val $name: $_ = $rhs" if placeholderFormat(rhs).isDefined =>
+            build(name.decodedName.toString, placeholderFormat(rhs).get)
+          case other => other
+        }
+      else generated.map { case (n, f) => build(n, f) } ++ cStats
+
+    q"""
+    $strippedClass
+    $cMods object ${className.toTermName} extends ..$cParents { $cSelf =>
+      ..$newStats
+    }
+    """
+  }
+}

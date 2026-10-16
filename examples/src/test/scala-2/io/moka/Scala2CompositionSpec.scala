@@ -8,6 +8,9 @@ import zio.json.jsonField
   */
 final case class S2SameRunPlain(@BsonProperty("p") a: Int)
 
+/** Generic: it cannot carry a moka object, so it is never composed. */
+final case class S2GenericInner[T](@BsonProperty("g") value: T)
+
 /** Stacked annotations, no companion: each generates its object into one real
   * companion (spec rule 6).
   */
@@ -83,6 +86,16 @@ class Scala2CompositionSpec extends munit.FunSuite {
     assert(errors.contains("moka:"), errors)
     assert(errors.contains("Nutrition"), errors)
     assert(errors.contains("BSON"), errors)
+    assert(errors.contains("moka.descendUnannotated"), errors)
+  }
+
+  test("a generic nested type cannot be composed, so it is an error") {
+    val errors = compileErrors("""
+      @moka case class UsesGeneric(inner: S2GenericInner[Int])
+    """)
+    assert(errors.contains("moka:"), errors)
+    assert(errors.contains("S2GenericInner"), errors)
+    assert(errors.contains("generic"), errors)
     assert(errors.contains("moka.descendUnannotated"), errors)
   }
 
