@@ -49,6 +49,16 @@ object S2TestOwner {
   val JsonFields = generateJsonFields[S2TestOwner]
 }
 
+@mokaBson
+@mokaJson
+final case class S2StackedCustomNames(
+    @BsonProperty("b") @jsonField("j") name: String
+)
+object S2StackedCustomNames {
+  val Bson = generateBsonFields[S2StackedCustomNames]
+  val Json = generateJsonFields[S2StackedCustomNames]
+}
+
 class Scala2ConflictSpec extends munit.FunSuite {
 
   test("@mokaBson selects BSON annotations and defaults to BsonFields") {
@@ -139,6 +149,30 @@ class Scala2ConflictSpec extends munit.FunSuite {
     }
     assertEquals(StackedPlaceholders.Fields.a, "a")
     assertEquals(StackedPlaceholders.BsonFields.a, "a")
+  }
+
+  test("stacking with custom placeholder names generates only those objects") {
+    assertEquals(S2StackedCustomNames.Bson.name, "b")
+    assertEquals(S2StackedCustomNames.Json.name, "j")
+    val errors = compileErrors("S2StackedCustomNames.JsonFields")
+    assert(errors.contains("JsonFields"), "unrequested JsonFields was generated")
+  }
+
+  test("@moka(name = ...) accepts a named argument") {
+    val errors = compileErrors("""
+      @moka(name = "Custom") case class NamedObjectArg(a: Int)
+      val a: "a" = NamedObjectArg.Custom.a
+    """)
+    assertEquals(errors, "")
+  }
+
+  test("a hand-written companion object Fields is reported, not silently kept") {
+    val errors = compileErrors("""
+      @moka case class HandWritten(a: Int)
+      object HandWritten { object Fields { val custom = 1 } }
+      HandWritten.Fields.custom
+    """)
+    assert(errors.contains("Fields"), errors)
   }
 }
 

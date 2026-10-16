@@ -29,6 +29,49 @@ object JsonOnlyFruit {
   val JsonFields = generateJsonFields[JsonOnlyFruit]
 }
 
+@moka
+final case class ZioBsonCrossRunOuter(inner: SharedZioBsonInner)
+object ZioBsonCrossRunOuter {
+  val Fields = generateFields[ZioBsonCrossRunOuter]
+}
+
+@moka
+final case class JavaCrossRunOuter(
+    p: SharedJavaInnerPositional,
+    n: SharedJavaInnerNamed
+)
+object JavaCrossRunOuter {
+  val Fields = generateFields[JavaCrossRunOuter]
+}
+
+@moka
+final case class JavaOutOfOrderArgs(
+    @org.bson.codecs.pojo.annotations.BsonProperty(
+      useDiscriminator = true,
+      value = "r"
+    ) a: String
+)
+object JavaOutOfOrderArgs {
+  val Fields = generateFields[JavaOutOfOrderArgs]
+}
+
+@moka
+final case class JavaDiscriminatorOnly(
+    @org.bson.codecs.pojo.annotations.BsonProperty(useDiscriminator = true)
+    a: String
+)
+object JavaDiscriminatorOnly {
+  val Fields = generateFields[JavaDiscriminatorOnly]
+}
+
+@moka
+final case class JavaExplicitEmpty(
+    @org.bson.codecs.pojo.annotations.BsonProperty("") a: String
+)
+object JavaExplicitEmpty {
+  val Fields = generateFields[JavaExplicitEmpty]
+}
+
 class ConflictResolutionSpec extends munit.FunSuite {
 
   test(
@@ -71,5 +114,27 @@ class ConflictResolutionSpec extends munit.FunSuite {
 
   test("cross-compiled Java driver BsonProperty renames field") {
     assertEquals(SharedJavaBson.Fields.f, "jb")
+  }
+
+  test("nested zio-bson @bsonField from an earlier compile run renames field") {
+    assertEquals(ZioBsonCrossRunOuter.Fields.inner.a, "inner.zr")
+  }
+
+  test("nested Java @BsonProperty from an earlier compile run renames field") {
+    assertEquals(JavaCrossRunOuter.Fields.p.a, "p.jp")
+    assertEquals(JavaCrossRunOuter.Fields.n.a, "n.jn")
+  }
+
+  test("out-of-order named arguments on Java @BsonProperty rename field") {
+    assertEquals(JavaOutOfOrderArgs.Fields.a, "r")
+  }
+
+  test("Java @BsonProperty with only useDiscriminator keeps field name") {
+    assertEquals(JavaDiscriminatorOnly.Fields.a, "a")
+  }
+
+  // The Java driver treats an empty value as "use the field name".
+  test("Java @BsonProperty(\"\") keeps field name") {
+    assertEquals(JavaExplicitEmpty.Fields.a, "a")
   }
 }
