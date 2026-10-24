@@ -113,4 +113,7 @@ collection.updateOne(
 
 - Generated members start with `_`; don't name your own fields `_path`, `_matched` or `_all`.
 - `import io.moka.syntax._` lets a node be passed where a `String` is expected; `._path` is preferred.
-- After changing a rename annotation, run a clean build (`sbt clean compile`) to be safe.
+- **After changing a rename annotation, always do a clean build** (`sbt clean compile`).
+  Incremental compilation does not see the change outside the renamed type's own file:
+  outer types and `generate…Fields` calls elsewhere keep the old name, which still compiles
+  and silently matches nothing in MongoDB.
