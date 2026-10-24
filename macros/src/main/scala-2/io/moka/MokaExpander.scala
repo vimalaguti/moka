@@ -76,9 +76,13 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   // ---------------------------------------------------------------------------
   // Reading annotations
 
+  /** The simple name of an annotation's type, looking through meta-annotations:
+    * `@(BsonProperty @field)("x")` parses as `Annotated(field, BsonProperty)`.
+    */
   private def leafTypeName(tree: Tree): Option[String] = tree match {
     case Ident(TypeName(name))     => Some(name)
     case Select(_, TypeName(name)) => Some(name)
+    case Annotated(_, arg)         => leafTypeName(arg)
     case _                         => None
   }
 
@@ -93,10 +97,14 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   private def renamesFromMods(mods: Modifiers): List[(String, String)] =
     mods.annotations
       .flatMap {
-        case tree @ Apply(Select(New(tpt), _), _) =>
+        case Apply(Select(New(tpt), _), args) =>
+          // the value is read from the arguments only, never from a
+          // meta-annotation inside `tpt`
           leafTypeName(tpt)
             .filter(allRenaming)
-            .flatMap(n => findStringConstant(tree).map(v => (n, v)))
+            .flatMap(n =>
+              args.view.flatMap(findStringConstant).headOption.map(v => (n, v))
+            )
         case _ => None
       }
       .filter(_._2.nonEmpty)
@@ -171,6 +179,19 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   private def params(tpe: Type): List[Symbol] =
     tpe.dealias.typeSymbol.asClass.primaryConstructor.asMethod.paramLists.headOption
       .getOrElse(Nil)
+
+  /** A constructor parameter's type as a member of `tpe`: the class's type
+    * parameters replaced by `tpe`'s type arguments, so `Box[Inner]`'s
+    * `value: T` is an `Inner`. `typeSignatureIn` does not do it: a constructor
+    * parameter is owned by the constructor, not by the class.
+    */
+  private def paramType(p: Symbol, tpe: Type): Type = {
+    val d       = tpe.dealias
+    val tparams = d.typeSymbol.asClass.typeParams
+    val sig     = p.typeSignatureIn(d)
+    if (tparams.isEmpty || tparams.length != d.typeArgs.length) sig
+    else sig.substituteTypes(tparams, d.typeArgs)
+  }
 
   private def pathOf(prefix: String, name: String): String =
     if (prefix.isEmpty) name
@@ -389,7 +410,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       )
     val members = params(tpe).map { p =>
       val name         = p.name.decodedName.toString
-      val (pt, arr)    = unwrap(p.typeSignatureIn(tpe.dealias))
+      val (pt, arr)    = unwrap(paramType(p, tpe))
       val found: Names = names.members.getOrElse(name, mismatch(name))
       if (isDescendable(pt) && !seen(key(pt))) found match {
         case node: NNode =>
@@ -478,7 +499,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       val ppos      = if (p.pos != NoPosition) p.pos else pos
       val ppath =
         pathOf(path, resolveName(ppos, fieldName, renamesFromSymbol(p), format))
-      val (pt, arr) = unwrap(p.typeSignatureIn(tpe.dealias))
+      val (pt, arr) = unwrap(paramType(p, tpe))
       if (isDescendable(pt) && !seen(key(pt)))
         descend(
           TermName(fieldName),
@@ -510,6 +531,25 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     nodeObject(term, path, members ::: arrayOps)
   }
 
+  /** Simple names of the types and objects declared next to the annottee, in
+    * the body of its enclosing class or object. `c.typecheck` cannot see them
+    * (the annotation macro runs before the typer), so a field type naming one
+    * would silently resolve to whatever same-named type is visible outside.
+    */
+  @scala.annotation.nowarn("cat=deprecation")
+  private lazy val siblingNames: Set[String] = {
+    val body = c.enclosingClass match {
+      case ClassDef(_, _, _, impl) => impl.body
+      case ModuleDef(_, _, impl)   => impl.body
+      case _                       => Nil
+    }
+    body.collect {
+      case ClassDef(_, n, _, _) => n.decodedName.toString
+      case TypeDef(_, n, _, _)  => n.decodedName.toString
+      case ModuleDef(_, n, _)   => n.decodedName.toString
+    }.toSet
+  }
+
   /** The members of one generated root object, from the annottee's untyped
     * parameters.
     */
@@ -535,9 +575,19 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         case Select(_, n) => n.decodedName.toString == selfName
         case _            => false
       }
+      // a sibling of the annottee shadows any same-named type outside, but
+      // typechecking would find only the outside one
+      val mentionsSibling = tpt.exists {
+        case Ident(n) =>
+          val s = n.decodedName.toString
+          s != selfName && siblingNames(s)
+        case _ => false
+      }
       if (mentionsSelf) leaf(term, path)
       else {
-        val resolved = c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
+        val resolved =
+          if (mentionsSibling) EmptyTree
+          else c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
         if (resolved.isEmpty)
           c.abort(
             vd.pos,
@@ -614,11 +664,18 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       case (cd: ClassDef) :: (md: ModuleDef) :: Nil => (cd, Some(md))
       case _ => c.abort(c.enclosingPosition, "moka: invalid annottee")
     }
-    val ClassDef(classMods, className, _, classImpl) = classDecl
+    val ClassDef(classMods, className, classTparams, classImpl) = classDecl
     if (!classMods.hasFlag(Flag.CASE))
       c.abort(
         c.enclosingPosition,
         s"moka: class $className is not a case class."
+      )
+    if (classTparams.nonEmpty)
+      c.abort(
+        c.enclosingPosition,
+        s"moka: $className is generic: on Scala 2.13 generic case classes cannot carry moka annotations, " +
+          "since an outer type could not compose its names from them. Remove the annotation; an outer type can " +
+          "still reach it with -Xmacro-settings:moka.descendUnannotated."
       )
     val firstParams: List[ValDef] = classDecl match {
       case q"$_ class $_[..$_] $_(...$paramss) extends ..$_ { $_ => ..$_ }" =>
