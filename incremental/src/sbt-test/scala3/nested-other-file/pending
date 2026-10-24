@@ -1,0 +1,6 @@
+# L-stale (KNOWN_LIMITATIONS.md): Outer.scala is not recompiled after the
+# rename in Inner.scala, so Check sees the old literal and fails to compile.
+> compile
+$ copy-file changes/Inner.scala src/main/scala/model/Inner.scala
+$ copy-file changes/Check.scala src/main/scala/model/Check.scala
+> compile

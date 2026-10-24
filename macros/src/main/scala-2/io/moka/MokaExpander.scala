@@ -220,10 +220,11 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   /** A member whose literal is `N`'s object's literal `lit` re-prefixed with
     * `base`. When `N`'s object has a stable path, the initializer spells it as
     * `"base." + N.Obj.member`: the typer folds that to the same constant, and
-    * the attachment it leaves on the folded literal is where zinc finds the
-    * dependency on `N`'s object and the member's name. Without it, a rename in
-    * `N` would not recompile this file incrementally. The declared type stays
-    * the literal type, so selections still fold at use sites.
+    * the attachment it leaves on the folded literal was meant to give zinc the
+    * dependency on `N`'s object and the member's name. It does not suffice: a
+    * rename in `N` still does not recompile this file (scripted test
+    * `scala2/nested-other-file`, KNOWN_LIMITATIONS.md L-stale). The declared
+    * type stays the literal type, so selections still fold at use sites.
     */
   private def composedVal(
       term: TermName,

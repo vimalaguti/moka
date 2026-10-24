@@ -1,6 +1,0 @@
-# 2.13 composes Outer's names from Inner's object through a reference zinc
-# tracks, so Outer.scala is recompiled after the rename.
-> compile
-$ copy-file changes/Inner.scala src/main/scala/model/Inner.scala
-$ copy-file changes/Check.scala src/main/scala/model/Check.scala
-> compile

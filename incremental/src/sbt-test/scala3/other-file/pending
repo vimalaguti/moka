@@ -1,0 +1,6 @@
+# L-stale (KNOWN_LIMITATIONS.md): the generateJsonFields call on Invoice in
+# another file is not re-expanded after the rename, so Check fails.
+> compile
+$ copy-file changes/Invoice.scala src/main/scala/model/Invoice.scala
+$ copy-file changes/Check.scala src/main/scala/use/Check.scala
+> compile

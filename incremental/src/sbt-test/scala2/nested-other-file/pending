@@ -1,0 +1,7 @@
+# L-stale (KNOWN_LIMITATIONS.md): Outer's object composes Inner's names, and
+# spells them as Inner.JsonFields.a, but zinc still does not recompile
+# Outer.scala after the rename in Inner.scala, so Check fails.
+> compile
+$ copy-file changes/Inner.scala src/main/scala/model/Inner.scala
+$ copy-file changes/Check.scala src/main/scala/model/Check.scala
+> compile

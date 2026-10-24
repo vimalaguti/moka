@@ -155,8 +155,9 @@ non-generic case class `N` does not re-read `N`'s annotations (lost from classfi
 `N`'s companion object with the matching or neutral marker and copies its literals, re-prefixed.
 Shape (where descent stops) still comes from the outer. No such object → `moka:` error;
 `-Xmacro-settings:moka.descendUnannotated` reads annotations anyway with a warning (the only way
-for generic `N`). Composed initializers are spelled `N.Obj.member` so zinc records the dependency —
-except for empty-package types, which have no stable path. **Scala 3 never composes**: TASTy keeps
+for generic `N`). Composed initializers are spelled `N.Obj.member`, meant to let zinc record the dependency, but
+a rename still does not recompile the outer file (`incremental` scripted test
+`scala2/nested-other-file`, pending; see `KNOWN_LIMITATIONS.md`, L-stale). **Scala 3 never composes**: TASTy keeps
 all annotations; it only emits the markers. The 2.13 code lives in `MokaExpander.scala`;
 `Moka.scala` is the public surface.
 
