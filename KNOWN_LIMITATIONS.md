@@ -12,7 +12,6 @@ and the version pages.
 | L-sibling | 2.13 | A nested type declared in the same object or class as the annottee is invisible to the macro. | `Scala2MokaSpec` "a nested type declared beside the annottee is rejected"; `Scala2ReviewSpec` "sibling shadowing ..." | accepted, clear error |
 | L-generic | 2.13 | A generic nested type cannot carry a moka object; only the global opt-out reaches it. | `Scala2CompositionSpec` "a generic nested type cannot be composed ..."; `OptOutSpec` "a generic nested type is read ..." | accepted, clear error |
 | L-noflag | 2.13 | `@moka` alone without `-Ymacro-annotations` gives `not found: value Fields`, naming no flag. | `Scala2LimitationsSpec` "L-noflag" (ignored) | accepted, documented |
-| L-nowarn | 2.13 | `@nowarn` cannot silence the wrong-format warning (it is issued before the typer); only `-Wconf` can. | `Scala2LimitationsSpec` "L-nowarn" (ignored) | accepted, documented |
 | L-samename | 2.13 | A same-named class from another package is descended into. | `Scala2ReviewSpec` "2.5: ..." (ignored) | deferred: the path is correct today |
 | L-meta-optout | 2.13 opt-out | A nested type's meta-annotated rename (`@(BsonProperty @field)`) is not read. | `ReviewOptOutSpec` "3b: ..." (ignored) | deferred |
 | L-typo | 3 | A typo's error prints the whole generated refinement type. | `Scala3LimitationsSpec` "L-typo" (ignored) | accepted |

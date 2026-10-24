@@ -85,6 +85,8 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     val ownRenamed         = scala.collection.mutable.ListBuffer.empty[String]
     val otherRenamed       = scala.collection.mutable.ListBuffer.empty[String]
     var otherPos: Position = NoPosition
+    // annotations of those fields, where a @nowarn may sit
+    val otherAnnotations = scala.collection.mutable.ListBuffer.empty[Tree]
   }
 
   // ---------------------------------------------------------------------------
@@ -661,6 +663,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       else if (renames.nonEmpty) {
         if (acc.otherRenamed.isEmpty) acc.otherPos = vd.pos
         acc.otherRenamed += fieldName
+        acc.otherAnnotations ++= vd.mods.annotations
       }
       val path = resolveName(vd.pos, fieldName, renames, format)
       val term = TermName(fieldName)
@@ -702,13 +705,36 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     }
   }
 
+  /** Whether a `@nowarn` among `annotations` covers `msg`. The macro warns
+    * before the typer has registered `@nowarn`, so scalac cannot apply it: this
+    * reads the annotation itself, supporting `@nowarn` and `@nowarn("msg=re")`.
+    * Any other filter (`cat=`, `site=`, ...) is not understood and does not
+    * suppress.
+    */
+  private def suppressed(annotations: List[Tree], msg: String): Boolean =
+    annotations.exists {
+      case Apply(Select(New(tpt), _), args)
+          if leafTypeName(tpt).contains("nowarn") =>
+        args match {
+          case Nil => true
+          case Literal(Constant(filter: String)) :: Nil =>
+            val parts = filter.split('&').toList
+            parts.forall(_.startsWith("msg=")) && parts.forall { p =>
+              java.util.regex.Pattern.compile(p.drop(4)).matcher(msg).find()
+            }
+          case _ => false
+        }
+      case _ => false
+    }
+
   /** One generated root object: its members and its marker (spec rule 1). */
   private def rootObject(
       name: TermName,
       className: TypeName,
       fields: List[ValDef],
       format: Format,
-      formats: Set[Format]
+      formats: Set[Format],
+      classAnnotations: List[Tree]
   ): Tree = {
     val acc   = new Acc
     val terms = fieldNames(className, fields, format, acc)
@@ -718,13 +744,13 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     if (
       acc.ownRenamed.isEmpty && acc.otherRenamed.nonEmpty && !formats(other)
     ) {
-      c.warning(
-        acc.otherPos,
+      val msg =
         s"moka: $className's fields are renamed only by ${other.label} annotations " +
           s"(${acc.otherRenamed.mkString(", ")}), which its ${format.label} object $name ignores: its names " +
           s"are the Scala field names. If the documents use the ${other.label} names, generate them with " +
           s"${other.placeholder} or ${other.annotation}."
-      )
+      if (!suppressed(classAnnotations ++ acc.otherAnnotations, msg))
+        c.warning(acc.otherPos, msg)
     }
     val marker = if (acc.renamed) format.marker else neutralMarker
     q"object $name extends ${marker} { ..$terms }"
@@ -854,7 +880,14 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
 
     val formats = generated.map(_._2).toSet
     def build(name: String, format: Format) =
-      rootObject(TermName(name), className, firstParams, format, formats)
+      rootObject(
+        TermName(name),
+        className,
+        firstParams,
+        format,
+        formats,
+        classMods.annotations
+      )
 
     val newStats =
       if (placeholders.nonEmpty)
