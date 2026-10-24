@@ -7,7 +7,7 @@ and the version pages.
 
 | ID | Ver. | Limitation | Test | Status |
 |---|---|---|---|---|
-| L-stale | 3, 2.13 (partly) | After a rename changes, code in another file or module keeps the old literal until recompiled: an outer type nesting the changed type, or `generateFields[T]` outside `T`'s file. Silent: queries match nothing. 2.13 only for empty-package types and the opt-out. | none: needs an incremental-compilation test | **open**, see To do |
+| L-stale | 3, 2.13 (partly) | After a rename changes, a `generateFields[T]` call in another module than `T` keeps the old literal until recompiled (Scala 3; within one module it propagates). Silent: queries match nothing. 2.13: only empty-package types and the opt-out. | `incremental/src/sbt-test/scala3/other-module` (`pending`); the workaround `scala3/other-module-companion` and the 2.13 claim `scala2/nested-other-file` pass | **open**, see To do |
 | L-mutual | 2.13 | Mutually recursive models cannot expand (`StackOverflowError` in the compiler). | `Scala2LimitationsSpec` "L-mutual" (ignored) | accepted |
 | L-sibling | 2.13 | A nested type declared in the same object or class as the annottee is invisible to the macro. | `Scala2MokaSpec` "a nested type declared beside the annottee is rejected"; `Scala2ReviewSpec` "sibling shadowing ..." | accepted, clear error |
 | L-generic | 2.13 | A generic nested type cannot carry a moka object; only the global opt-out reaches it. | `Scala2CompositionSpec` "a generic nested type cannot be composed ..."; `OptOutSpec` "a generic nested type is read ..." | accepted, clear error |
@@ -26,15 +26,13 @@ and errors after a first macro abort.
 
 ## To do before 0.2.0
 
-- [ ] **L-stale, red test.** An incremental test (sbt `scripted` or a zinc-driven
-      harness): change a nested type's rename; assert the outer, and a
-      `generateFields` call in another module, see the new name without a clean.
-- [ ] **L-stale, Scala 3 spike.** Make the expansion reference `N`'s companion
-      module by type only, so zinc records a dependency whose API changes with
-      the rename, without forcing `N`'s generated val (the `CyclicReference`
-      that ruled out composition on Scala 3). If it works, drop L-stale on Scala 3;
-      if not, document that defining the val in `T`'s companion is the safe
-      place, once a test proves it.
+- [x] **L-stale, red test.** `incremental` scripted tests
+      (`sbt "+macros/publishLocal; incremental/scripted"`). Dqo's bug 3 (main
+      to test configuration) did not reproduce with sbt 2.0.8.
+- [ ] **L-stale, Scala 3 spike.** Make the expansion record a dependency on
+      `T`'s members, so the consumer module is invalidated when a rename
+      changes across modules. If it works, `scala3/other-module` becomes a
+      `test`; if not, the companion-val workaround stays the documented answer.
 - [ ] Re-test the snapshot on the real projects.
 - [ ] After merge: tag `v0.2.0` (`RELEASING.md`), date the changelog heading,
       publish gh-pages from the tagged checkout.

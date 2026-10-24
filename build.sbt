@@ -141,6 +141,26 @@ lazy val docs = project
   .dependsOn(examples)
   .enablePlugins(MdocPlugin, DocusaurusPlugin, GhpagesPlugin)
 
+/** Incremental-compilation tests (sbt scripted): each builds a small project
+  * against the locally published moka, changes a rename, recompiles without a
+  * clean, and checks the new name was seen. Not aggregated, so `+testFull`
+  * skips it; run `sbt "+macros/publishLocal; incremental/scripted"`. A test
+  * whose script file is `pending` instead of `test` pins a known limitation: it
+  * runs, but its failure is expected (KNOWN_LIMITATIONS.md, L-stale).
+  */
+lazy val incremental = project
+  .enablePlugins(ScriptedPlugin)
+  .settings(
+    crossScalaVersions := Nil,
+    publish / skip     := true,
+    scriptedLaunchOpts ++= Seq(
+      "-Xmx1024M",
+      s"-Dmoka.version=${(macros / version).value}"
+    ),
+    scriptedBufferLog    := false,
+    scriptedDependencies := {}
+  )
+
 /** Not aggregated by `root`, so it never runs in CI. Its sources are generated
   * by scripts/gen-bench-model.py and are git-ignored.
   */

@@ -35,3 +35,7 @@ jobs:
       run: sbt "+scalafmtCheckAll; scalafmtSbtCheck"
     - name: Run tests
       run: sbt +testFull
+    - name: Run incremental-compilation tests
+      # scripted builds small projects against the locally published moka;
+      # `pending` tests pin known limitations and do not fail the build.
+      run: sbt "+macros/publishLocal; incremental/scripted"
