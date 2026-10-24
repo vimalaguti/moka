@@ -61,6 +61,10 @@ On both versions:
 - Scala 2.13: a companion member named like a generated object (e.g. your own
   `object Fields`) is a compile error. Rename it.
 
+After changing a renaming annotation, **do a clean build**: code in other files
+keeps the old name otherwise
+([stale names](features.md#stale-names-after-changing-a-rename)).
+
 See also [known limitations](features.md#known-limitations).
 
 ## 0.1.0 (2026-08-28)
