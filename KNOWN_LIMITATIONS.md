@@ -7,7 +7,7 @@ and the version pages.
 
 | ID | Ver. | Limitation | Test | Status |
 |---|---|---|---|---|
-| L-stale | 3, 2.13 (partly) | After a rename changes, a `generateFields[T]` call in another module than `T` keeps the old literal until recompiled (Scala 3; within one module it propagates). Silent: queries match nothing. 2.13: only empty-package types and the opt-out. | `incremental/src/sbt-test/scala3/other-module` (`pending`); the workaround `scala3/other-module-companion` and the 2.13 claim `scala2/nested-other-file` pass | **open**, see To do |
+| L-stale | 3, 2.13 | After a rename changes, code in another file than the renamed type keeps the old literal until recompiled, in the same or another module: an outer type nesting it, or a `generateFields[T]` call outside `T`'s file. A rename is not an API change for zinc. Silent: queries match nothing. On 2.13 the composed `N.Obj.member` reference does not change that. | `incremental/src/sbt-test/`: `scala3/nested-other-file`, `scala3/other-file`, `scala3/other-module`, `scala2/nested-other-file` (all `pending`); `scala3/other-module-companion` passes (a val in `T`'s companion is current) | **open**, see To do |
 | L-mutual | 2.13 | Mutually recursive models cannot expand (`StackOverflowError` in the compiler). | `Scala2LimitationsSpec` "L-mutual" (ignored) | accepted |
 | L-sibling | 2.13 | A nested type declared in the same object or class as the annottee is invisible to the macro. | `Scala2MokaSpec` "a nested type declared beside the annottee is rejected"; `Scala2ReviewSpec` "sibling shadowing ..." | accepted, clear error |
 | L-generic | 2.13 | A generic nested type cannot carry a moka object; only the global opt-out reaches it. | `Scala2CompositionSpec` "a generic nested type cannot be composed ..."; `OptOutSpec` "a generic nested type is read ..." | accepted, clear error |
@@ -27,12 +27,19 @@ and errors after a first macro abort.
 ## To do before 0.2.0
 
 - [x] **L-stale, red test.** `incremental` scripted tests
-      (`sbt "+macros/publishLocal; incremental/scripted"`). Dqo's bug 3 (main
-      to test configuration) did not reproduce with sbt 2.0.8.
-- [ ] **L-stale, Scala 3 spike.** Make the expansion record a dependency on
-      `T`'s members, so the consumer module is invalidated when a rename
-      changes across modules. If it works, `scala3/other-module` becomes a
-      `test`; if not, the companion-val workaround stays the documented answer.
+      (`sbt "+macros/publishLocal; incremental/scripted"`), with zinc's
+      recompile-everything threshold off so small builds show real decisions.
+      Dqo's bug 3 (rename in `main`, stale in `test`) did not reproduce.
+- [x] **L-stale, call-site spike** (failed). Dead selections of every read
+      field in the Scala 3 expansion change nothing: zinc's debug log shows no
+      API change at all for the renamed type, so no use of it can invalidate.
+- [ ] **L-stale, decide.** A fix needs something in the renamed type's own
+      file whose API changes with the rename, referenced by every user: e.g.
+      require (or generate, on 2.13) a moka val in every nested type's
+      companion and reference it from outers on both versions — the composition
+      Scala 3 rejected for `CyclicReference` — and find why 2.13's existing
+      `N.Obj.member` reference does not invalidate. Otherwise: document a clean
+      build after a rename as the rule.
 - [ ] Re-test the snapshot on the real projects.
 - [ ] After merge: tag `v0.2.0` (`RELEASING.md`), date the changelog heading,
       publish gh-pages from the tagged checkout.

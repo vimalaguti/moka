@@ -156,7 +156,10 @@ marker included, is readable from another file or later in the same file.
 - **Stale names after incremental builds — accepted, documented on the
   website.** zinc does not treat a change to a renaming annotation as an API
   change, so users of `N` in other files keep the old literal until a clean
-  build (verified on 3.3.8, within a module and from tests). Fixing it on Scala
+  build (verified on 3.3.8, within a module and from tests).
+  *Update 2026-10-24:* the scripted tests in `incremental/` show this on 2.13
+  too: the composed `N.Obj.member` reference does not make zinc recompile the
+  outer file. See `KNOWN_LIMITATIONS.md`, L-stale. Fixing it on Scala
   3 would need a dependency on `N`'s companion, which composition there rules
   out (`CyclicReference`). Users are told to clean-build after changing a
   rename.
