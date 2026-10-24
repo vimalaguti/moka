@@ -38,3 +38,7 @@ and errors after a first macro abort.
 - [ ] Re-test the snapshot on the real projects.
 - [ ] After merge: tag `v0.2.0` (`RELEASING.md`), date the changelog heading,
       publish gh-pages from the tagged checkout.
+
+## Ideas (not planned)
+
+- A CI job that deploys gh-pages automatically on merges to master.
