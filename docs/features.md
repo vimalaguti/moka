@@ -56,6 +56,9 @@ Renamed.Params.a
 (On Scala 2 the name is passed to the annotation instead: `@moka("Params")`
 or `@moka(name = "Params")`.)
 
+The name is independent of the format: if your MongoDB documents use zio-json's
+names, `val Fields = generateJsonFields[T]` reads as usual.
+
 ## Wire format annotations
 
 When a field is renamed in its bson representation, the `Fields` member
@@ -110,6 +113,12 @@ Dual.JsonFields.color
 
 - **Supported JSON annotations**: `@jsonField` (zio-json), matched by simple name without runtime dependencies.
 - **Conflict detection**: if conflicting annotations appear for the *same* format (e.g. `@BsonProperty("a")` and `@bsonField("b")`), compilation fails fast with an informative error. Agreeing annotations succeed.
+- **Wrong format warning**: when a type's fields are renamed only by the *other*
+  format (say `@jsonField` under `generateFields`), moka warns that the names
+  are the Scala field names. If that is intended, silence it with
+  `@nowarn("msg=moka")` on the val (Scala 3) or
+  `-Wconf:msg=renamed only by:s` (Scala 2.13, where `@nowarn` cannot reach it).
+  Scala 2.13 does not warn when the companion also generates the other format.
 
 ### Format markers
 
@@ -237,7 +246,7 @@ declared beside the annotated class — see
 
 A node is not a `String` — `String` is final, so a value cannot both *be* the
 name `"engine"` and expose `.power`. Its own path is `_path`, which is what
-MongoDB APIs want:
+MongoDB APIs want (its `toString` is the path too, so `s"${node}.x"` works):
 
 ```scala mdoc
 Car.Fields.engine._path
@@ -257,7 +266,9 @@ exists(Car.Fields.engine)
 On Scala 3 there is a tooling cost: a file that applies this conversion
 currently fails SemanticDB extraction, so Metals loses go-to-definition and
 find-references for that file. Compilation is unaffected, and `._path` avoids it
-entirely.
+entirely. The compiler may still *suggest* this import when a node is passed
+where a `String` is expected; `._path` is the answer. Interpolating a node has
+been seen to trigger the same SemanticDB warning.
 
 It is not imported by default on purpose. The conversion only applies where a
 `String` is expected, so in a position where the type is *inferred* it would
@@ -294,9 +305,10 @@ collection.updateOne(
 
 Incremental compilation (sbt, Metals, Bloop) does not treat a change to a
 renaming annotation as a change of the type's API. After you add, change or
-remove a `@BsonProperty`, `@bsonField` or `@jsonField`, an outer type declared
-in **another file** that nests the changed type may keep the old name until that
-file is recompiled:
+remove a `@BsonProperty`, `@bsonField` or `@jsonField`, code in **another file
+or module** may keep the old name until that file is recompiled: an outer type
+that nests the changed type, or a `generateFields[T]` call outside `T`'s file.
+The stale name compiles and silently matches nothing at runtime.
 
 - **Scala 3** — always the case.
 - **Scala 2.13** — handled: the outer object refers to the nested type's own

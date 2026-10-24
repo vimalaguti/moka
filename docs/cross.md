@@ -96,8 +96,8 @@ Car.Fields.engine.power == "engine.hp"
 ```
 
 The object is found by its format, not its name, so any val name works.
-Without one, 2.13 fails with `moka: nested type Engine has no BSON moka
-object, ...`. Value classes and plain values such as `String` are
+Without one, 2.13 fails with `moka: nested types without a BSON moka
+object ...`, listing each type that needs one. Value classes and plain values such as `String` are
 leaves and never need one. See [Scala 2](scala2.md#nested-fields) for generic
 nested types and the opt-out.
 

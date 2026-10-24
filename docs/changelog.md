@@ -15,6 +15,10 @@ sidebar_position: 6
   `MokaJsonNames` or `MokaNames` (nothing renamed).
   [Details](features.md#format-markers).
 - Scala 2.13: `@moka(name = "X")`, and stacking `@moka @mokaBson @mokaJson`.
+- A warning when a type is renamed only by the other format's annotations
+  (e.g. `@jsonField` under `generateFields`).
+- Scala 2.13: one error lists every nested type missing its moka object; a
+  nested type whose own expansion failed is reported as such.
 
 ### Fixed
 
@@ -27,6 +31,10 @@ sidebar_position: 6
 - Scala 2.13: a type declared beside the annotated class, sharing its name with
   an outer type, silently produced the outer type's names; it is now an error.
 - Scala 2.13: `@moka` on a generic case class gives a clear error.
+- Scala 2.13: a nested node two levels below a type from another run became a
+  plain string.
+- Scala 2.13: a node's `toString` was an object reference; on both versions it
+  is now its path, so `s"${node}.x"` works.
 
 ### Breaking changes and migration
 
@@ -41,7 +49,7 @@ object Engine {
 }
 ```
 
-Otherwise compilation fails with `moka: nested type Engine has no BSON moka
+Otherwise compilation fails with `moka: nested types without a BSON moka
 object`. Rebuild models compiled with moka 0.1.x. For types you cannot annotate,
 or generic ones, compile with `-Xmacro-settings:moka.descendUnannotated`
 ([opting out](scala2.md#opting-out)).

@@ -56,6 +56,11 @@ Bicycle.Chainring.Fields.cogs._all.teeth
 
 Works on Scala 3.3 LTS and later, with no experimental features.
 
+Unlike Scala 2, where every selection compiles to a constant, a selection here
+is a map lookup per level at runtime: negligible next to a database call, but
+worth hoisting out of a hot loop. A typo's error prints the whole generated type,
+which is long for a large model.
+
 ## Full code
 
 Every supported case is covered by the test suite:
