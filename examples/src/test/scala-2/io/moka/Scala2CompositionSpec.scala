@@ -20,6 +20,11 @@ final case class S2StackedNoCompanion(
     @BsonProperty("b") @jsonField("j") name: String
 )
 
+/** A chain with no moka objects: all of them must be reported at once. */
+final case class S2MissDeep(x: Int)
+final case class S2MissMid(deep: S2MissDeep)
+final case class S2MissOther(y: Int)
+
 /** 2.13-only rules of the composition contract
   * (specs/specs/2026-10-16-nested-composition-design.md).
   */
@@ -137,5 +142,79 @@ class Scala2CompositionSpec extends munit.FunSuite {
     assert(json.exists(_ ne null), json)
     assert(bson.exists(_.isInstanceOf[MokaBsonNames]), bson)
     assert(json.exists(_.isInstanceOf[MokaJsonNames]), json)
+  }
+
+  test("every nested type missing a moka object is reported in one error") {
+    val errors = compileErrors("""
+      @moka case class UsesMissing(mid: S2MissMid, other: Option[S2MissOther])
+    """)
+    assert(errors.contains("S2MissMid"), errors)
+    assert(errors.contains("S2MissOther"), errors)
+    // reached only through S2MissMid, which has no object to compose
+    assert(errors.contains("S2MissDeep"), errors)
+    assert(errors.contains("mid.deep"), errors)
+  }
+
+  test("a nested type whose own expansion failed is not told to add @moka") {
+    val diags = CompileHarness.compile("Casc.scala" -> """
+      package casc
+      import io.moka._
+
+      final case class Leaf(x: Int)
+
+      @moka final case class Mid(leaf: Leaf)
+      object Mid { val Fields = generateFields[Mid] }
+
+      @moka final case class MidNoCompanion(leaf: Leaf)
+
+      @moka final case class Outer(mid: Mid, other: MidNoCompanion)
+      object Outer { val Fields = generateFields[Outer] }
+    """)
+    val errors = diags.filter(_.severity == "ERROR").map(_.msg)
+    val outer =
+      errors.find(_.contains("(at mid)")).getOrElse(fail(errors.mkString("\n")))
+    assert(
+      outer.contains(
+        "Mid (at mid): it carries a moka annotation, but its own expansion failed"
+      ),
+      outer
+    )
+    assert(
+      outer.contains("MidNoCompanion (at other): it carries a moka annotation"),
+      outer
+    )
+    // the real cause is reported at Mid itself
+    assert(errors.exists(_.contains("Leaf (at leaf): add @moka")), errors)
+    // a failed expansion stops there: the outer error does not repeat Leaf
+    assert(!outer.contains("Leaf"), outer)
+  }
+
+  test(
+    "an object ignoring the only renames there are warns, unless both formats are generated"
+  ) {
+    val diags = CompileHarness.compile("Warn.scala" -> """
+      package warn
+      import io.moka._
+      import zio.json.jsonField
+
+      @moka final case class JsonOnly(@jsonField("j") a: String)
+
+      @moka final case class Both(@jsonField("j") a: String)
+      object Both {
+        val Fields     = generateFields[Both]
+        val JsonFields = generateJsonFields[Both]
+      }
+
+      @mokaJson final case class JsonAnn(@jsonField("j") a: String)
+    """)
+    val warnings = diags.filter(_.severity == "WARNING").map(_.msg)
+    assert(diags.forall(_.severity != "ERROR"), diags)
+    assertEquals(
+      warnings.count(_.contains("renamed only by JSON")),
+      1,
+      warnings
+    )
+    assert(warnings.exists(_.contains("JsonOnly's fields")), warnings)
+    assert(warnings.exists(_.contains("generateJsonFields")), warnings)
   }
 }

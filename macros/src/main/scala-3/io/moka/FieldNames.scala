@@ -37,5 +37,4 @@ private[moka] final class JsonFieldNames(children: Map[String, Any])
 /** The Scala 3 counterpart of a generated nested object. */
 class PathNode[P <: String](val _path: P, children: Map[String, Any])
     extends FieldNames(children),
-      FieldPath[P]:
-  override def toString: String = _path
+      FieldPath[P]

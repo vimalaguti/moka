@@ -12,4 +12,7 @@ package io.moka
   */
 trait FieldPath[P <: String] {
   def _path: P
+
+  /** The path, so `s"${Fields.node}.x"` is not an object reference. */
+  override def toString: String = _path
 }

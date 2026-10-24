@@ -147,6 +147,11 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(p, "r")
   }
 
+  test("a node interpolates as its path, not as an object reference") {
+    assertEquals(s"${Level1.Fields.renamed}.x", "r.x")
+    assertEquals(Level1.Fields.renamed.toString, "r")
+  }
+
   test("array operators do not nest") {
     assert(compileErrors("Basket.Fields.items._matched._matched").nonEmpty)
     assert(compileErrors("Basket.Fields.items._all._all").nonEmpty)
