@@ -26,3 +26,18 @@ object S2AmbiguousInner {
     val a: "x" = "x"
   }
 }
+
+/** Two levels below an outer from another run, referenced by nothing else, so
+  * `S2DeepLeaf`'s classfile symbol is still unloaded when the outer expands.
+  */
+@moka
+final case class S2DeepLeaf(x: Int)
+object S2DeepLeaf {
+  val Fields = generateFields[S2DeepLeaf]
+}
+
+@moka
+final case class S2DeepMid(leaf: S2DeepLeaf)
+object S2DeepMid {
+  val Fields = generateFields[S2DeepMid]
+}
