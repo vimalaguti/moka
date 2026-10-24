@@ -97,7 +97,10 @@ Scala 2 the placeholder only errors at refchecks, which munit's `compileErrors` 
 | Scala 3 only (`generateFields`, no annotation) | `.../scala-3/` | `Scala3MokaSpec` |
 
 Add a case to the matching `*Definitions.scala` and assert it in the matching suite — the
-definitions files *are* the compile-time half of the test.
+definitions files *are* the compile-time half of the test. munit's `compileErrors` returns
+only the first error and no warnings (a macro abort ends it); for warnings, or errors after
+an abort, use `CompileHarness` (`examples/src/test/scala-{2,3}`), which runs the compiler
+in-process. Known limitations and their (ignored) tests: `KNOWN_LIMITATIONS.md`.
 
 ### Contract details that are load-bearing (tests assert them)
 

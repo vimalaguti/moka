@@ -89,7 +89,8 @@ scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
 Without it the annotation is silently left in place, no `Fields` object is
 generated, and every selection fails with `value <field> is not a member of
 io.moka.FieldsNotGenerated_AddYmacroAnnotations`. That error name is the
-reminder: the flag is missing.
+reminder: the flag is missing. With `@moka` alone (no placeholder val) nothing
+names the flag: the error is just `not found: value Fields`.
 :::
 
 :::note[Upgrading a 2.13 build to 0.2.0]

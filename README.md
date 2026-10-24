@@ -24,7 +24,8 @@ scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
 ```
 
 Without it the annotation is silently left in place and every `Fields`
-selection fails with `not a member of io.moka.FieldsNotGenerated_AddYmacroAnnotations`.
+selection fails with `not a member of io.moka.FieldsNotGenerated_AddYmacroAnnotations`
+(with `@moka` alone: `not found: value Fields`).
 Scala 3 needs no flags.
 
 ## Example

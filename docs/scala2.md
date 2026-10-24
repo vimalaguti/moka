@@ -112,9 +112,10 @@ the nested object keeps the rename everywhere.
 - **The object is found by its format, not its name**, so `@moka("Paths")` on
   the nested type works too. Two objects of one format must have identical
   members, or the outer fails as ambiguous.
-- **Missing object → compile error**, naming the type and the fix:
-  `moka: nested type Engine has no BSON moka object, ...`. Objects compiled by
-  moka 0.1.x carry no format marker and do not count: recompile them.
+- **Missing object → compile error** listing every nested type that needs one,
+  with its path: `moka: nested types without a BSON moka object ...
+  - Engine (at engine): add @moka`. Objects compiled by moka 0.1.x carry no
+  format marker and do not count: recompile them.
 - **Leaves need nothing**: value classes, `String` and other plain values, and
   `Map` fields are never descended into.
 - **Not beside the annotated class.** The nested type may not be a member of
