@@ -116,8 +116,8 @@ Dual.JsonFields.color
 - **Wrong format warning**: when a type's fields are renamed only by the *other*
   format (say `@jsonField` under `generateFields`), moka warns that the names
   are the Scala field names. If that is intended, silence it with
-  `@nowarn("msg=moka")` on the val (Scala 3) or
-  `-Wconf:msg=renamed only by:s` (Scala 2.13, where `@nowarn` cannot reach it).
+  `@nowarn("msg=moka")` on the val (Scala 3), or on the case class or field
+  (Scala 2.13, where only a bare `@nowarn` or `msg=` filters are understood).
   Scala 2.13 does not warn when the companion also generates the other format.
 
 ### Format markers

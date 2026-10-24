@@ -217,4 +217,36 @@ class Scala2CompositionSpec extends munit.FunSuite {
     assert(warnings.exists(_.contains("JsonOnly's fields")), warnings)
     assert(warnings.exists(_.contains("generateJsonFields")), warnings)
   }
+
+  test("@nowarn on the class or the field silences the wrong-format warning") {
+    val diags = CompileHarness.compile("Warn.scala" -> """
+      package warn
+      import io.moka._
+      import scala.annotation.nowarn
+      import zio.json.jsonField
+
+      @nowarn("msg=moka")
+      @moka final case class OnClass(@jsonField("j") a: String)
+
+      @moka final case class OnField(@nowarn @jsonField("j") a: String)
+
+      @nowarn("msg=renamed only by&msg=OnBoth")
+      @moka final case class OnBoth(@jsonField("j") a: String)
+
+      @nowarn("msg=something else")
+      @moka final case class OtherMsg(@jsonField("j") a: String)
+
+      @nowarn("cat=deprecation")
+      @moka final case class OtherCat(@jsonField("j") a: String)
+    """)
+    val warnings = diags.filter(_.severity == "WARNING").map(_.msg)
+    assert(diags.forall(_.severity != "ERROR"), diags)
+    assertEquals(
+      warnings
+        .filter(_.contains("renamed only by"))
+        .map(_.takeWhile(_ != '\'')),
+      List("moka: OtherMsg", "moka: OtherCat"),
+      warnings
+    )
+  }
 }

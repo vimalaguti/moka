@@ -5,20 +5,6 @@ package io.moka
   */
 class Scala2LimitationsSpec extends munit.FunSuite {
 
-  // The annotation macro warns before the typer has registered @nowarn, so
-  // only a global -Wconf silences it.
-  test("L-nowarn: @nowarn silences the wrong-format warning".ignore) {
-    val diags = CompileHarness.compile("Warn.scala" -> """
-      package warn
-      import io.moka._
-      import zio.json.jsonField
-
-      @scala.annotation.nowarn("msg=moka")
-      @moka final case class JsonOnly(@jsonField("j") a: String)
-    """)
-    assertEquals(diags, Nil)
-  }
-
   // An annotation that never expands cannot report anything: the companion it
   // would have created is simply missing.
   test("L-noflag: @moka without -Ymacro-annotations names the flag".ignore) {
