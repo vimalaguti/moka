@@ -236,7 +236,7 @@ declared beside the annotated class — see
 ## Using a node as a string
 
 A node is not a `String` — `String` is final, so a value cannot both *be* the
-name `"engine"` and expose `.power`. Its own path is `path`, which is what
+name `"engine"` and expose `.power`. Its own path is `_path`, which is what
 MongoDB APIs want:
 
 ```scala mdoc
