@@ -303,17 +303,19 @@ collection.updateOne(
 
 ### Stale names after changing a rename
 
-Incremental compilation (sbt, Metals, Bloop) does not treat a change to a
-renaming annotation as a change of the type's API. After you add, change or
-remove a `@BsonProperty`, `@bsonField` or `@jsonField`, code in **another file
-or module** may keep the old name until that file is recompiled: an outer type
-that nests the changed type, or a `generateFields[T]` call outside `T`'s file.
-The stale name compiles and silently matches nothing at runtime.
+After you add, change or remove a `@BsonProperty`, `@bsonField` or
+`@jsonField`, incremental compilation may keep the old name in code that was not
+recompiled. The stale name compiles and silently matches nothing at runtime.
 
-- **Scala 3** — always the case.
+- **Scala 3** — within one module the change propagates. A
+  `generateFields[T]` call in **another module** than `T` keeps the old names:
+  define the val in `T`'s own companion and use it from there, which does
+  propagate.
 - **Scala 2.13** — handled: the outer object refers to the nested type's own
   moka object, so the outer file is recompiled. Except for types in the empty
   package (no `package` clause) and types read through the
   `moka.descendUnannotated` opt-out.
+
+Tested with sbt 2.0.8 and Scala 3.3.8; other tools (Bloop, Metals) may differ.
 
 **Do a clean build after changing a rename**, and always release from one.

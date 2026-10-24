@@ -1,0 +1,6 @@
+# The val lives in Invoice's own file, so the rename changes the companion's
+# API and the consumer module is recompiled.
+> compile
+$ copy-file changes/Invoice.scala core/src/main/scala/model/Invoice.scala
+$ copy-file changes/Check.scala consumer/src/main/scala/use/Check.scala
+> compile

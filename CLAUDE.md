@@ -27,7 +27,9 @@ Modules: `root` (aggregates `macros`, `examples`, `examplesOptOut`), `macros` (t
 `name := "moka"`), `examples` (demo + most tests), `examplesOptOut` (`examples-opt-out/`,
 2.13-only sources compiled with the opt-out, which is global to a compilation — hence its own
 project), `docs` (rooted at `moka-docs/`, mdoc + Docusaurus + ghpages). `bench` and `benchJmh`
-are not aggregated, so CI never builds them. `root` must stay `.in(file("."))`: without it sbt
+are not aggregated, so CI never builds them. `incremental` (also not aggregated) holds sbt
+`scripted` tests of incremental compilation, which munit cannot express; CI runs them as
+`sbt "+macros/publishLocal; incremental/scripted"`. A `pending` script pins a known limitation. `root` must stay `.in(file("."))`: without it sbt
 synthesizes a root that aggregates *every* project, which is how CI once compiled the benches.
 
 **Three sbt 2 shapes that silently do the wrong thing:**
