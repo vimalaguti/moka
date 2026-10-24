@@ -13,6 +13,60 @@ private[moka] object MokaExpander {
   final case class NLeaf(literal: String) extends Names
   final case class NNode(literal: String, members: Map[String, Names])
       extends Names
+
+  /** Annottees being expanded on this thread, outermost first, as (position
+    * key, class name). Resolving a nested type expands its annotation on
+    * demand, so a mutually recursive pair re-enters the first expansion; this
+    * is how that is caught before it overflows the stack.
+    */
+  private val expanding = new ThreadLocal[List[(String, String)]] {
+    override def initialValue(): List[(String, String)] = Nil
+  }
+
+  /** The cycle a re-entered expansion found, for the expansion that tried to
+    * resolve the type to report: the re-entered one's own error is swallowed by
+    * that silent typecheck.
+    */
+  private val cycle = new ThreadLocal[Option[List[String]]] {
+    override def initialValue(): Option[List[String]] = None
+  }
+
+  /** Every cycle found in the current compiler run, by the position key of each
+    * class on it, rotated to start there. scalac expands an annotation again
+    * after a failed attempt, which would otherwise see only part of the cycle.
+    * Tied to the run, so a long-lived compiler (Metals) forgets it once the
+    * cycle is fixed.
+    */
+  private type Cycles =
+    (java.lang.ref.WeakReference[AnyRef], Map[String, List[String]])
+  private val knownCycles = new ThreadLocal[Cycles] {
+    override def initialValue(): Cycles =
+      (new java.lang.ref.WeakReference[AnyRef](null), Map.empty)
+  }
+
+  private def cyclesOf(run: AnyRef): Map[String, List[String]] = {
+    val (ref, known) = knownCycles.get
+    if (ref.get eq run) known else Map.empty
+  }
+
+  private def recordCycle(
+      run: AnyRef,
+      keys: List[String],
+      names: List[String]
+  ): Unit = {
+    val rotated = keys.indices.map { j =>
+      val ns = names.drop(j) ++ names.take(j)
+      keys(j) -> (ns :+ ns.head)
+    }
+    knownCycles.set(
+      (new java.lang.ref.WeakReference(run), cyclesOf(run) ++ rotated)
+    )
+  }
+
+  private def cycleMessage(chain: List[String]): String =
+    s"moka: ${chain.mkString(" -> ")} is a cycle of case classes, which cannot be expanded on Scala 2.13: " +
+      "resolving each type re-enters the other's expansion. Break the cycle, e.g. by referring to one " +
+      "of them by id."
 }
 
 /** The Scala 2.13 expansion of `@moka`, `@mokaBson` and `@mokaJson`
@@ -700,6 +754,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         val resolved =
           if (mentionsSibling) EmptyTree
           else c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
+        if (resolved.isEmpty) cycle.get.foreach { chain =>
+          c.abort(vd.pos, cycleMessage(ownCycle.getOrElse(chain)))
+        }
         if (resolved.isEmpty)
           c.abort(
             vd.pos,
@@ -808,7 +865,40 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     case _                            => None
   }
 
+  /** The cycle through the class being expanded, if one is known. */
+  @scala.annotation.nowarn("cat=deprecation") // c.enclosingRun
+  private def ownCycle: Option[List[String]] = {
+    val pos = c.enclosingPosition
+    cyclesOf(c.enclosingRun).get(s"${pos.source.path}:${pos.point}")
+  }
+
+  @scala.annotation.nowarn("cat=deprecation") // c.enclosingRun
   def expand(annotation: String, annottees: Seq[Tree]): Tree = {
+    val pos = c.enclosingPosition
+    val key = s"${pos.source.path}:${pos.point}"
+    val name = annottees
+      .collectFirst { case cd: ClassDef => cd.name.decodedName.toString }
+      .getOrElse("?")
+    val run: AnyRef = c.enclosingRun
+    cyclesOf(run).get(key).foreach(chain => c.abort(pos, cycleMessage(chain)))
+    val stack = expanding.get
+    val i     = stack.indexWhere(_._1 == key)
+    if (i >= 0) {
+      val onCycle = stack.drop(i)
+      recordCycle(run, onCycle.map(_._1), onCycle.map(_._2))
+      val chain = onCycle.map(_._2) :+ name
+      cycle.set(Some(chain))
+      c.abort(pos, cycleMessage(chain))
+    }
+    expanding.set(stack :+ (key -> name))
+    try expandOnce(annotation, annottees)
+    finally {
+      expanding.set(stack)
+      if (stack.isEmpty) cycle.set(None)
+    }
+  }
+
+  private def expandOnce(annotation: String, annottees: Seq[Tree]): Tree = {
     val (classDecl, companion) = annottees.toList match {
       case (cd: ClassDef) :: Nil                    => (cd, None)
       case (cd: ClassDef) :: (md: ModuleDef) :: Nil => (cd, Some(md))

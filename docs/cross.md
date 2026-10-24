@@ -130,4 +130,5 @@ object Model {
 
 A directly self-referential field stops descending and stays a plain name. A
 mutually recursive pair — `A` holding a `B` that refers back to `A` — cannot be
-expanded on Scala 2 at all, because resolving `B` re-enters `A`'s own expansion.
+expanded on Scala 2 at all, because resolving `B` re-enters `A`'s own expansion;
+the error names the cycle (`A -> B -> A`).
