@@ -27,3 +27,5 @@ object Fruit {
 - All the Scala 2.13 rules apply: every nested case class gets the same
   `@moka` + `val Fields = generateFields[...]` pair, declared outside the
   object/class that holds the outer type. See [scala-2.13.md](scala-2.13.md).
+- After changing a rename annotation, always do a clean build: incremental
+  compilation keeps the old name in other files on both versions.
