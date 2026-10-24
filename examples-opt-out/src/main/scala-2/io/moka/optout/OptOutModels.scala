@@ -3,6 +3,7 @@ package io.moka.optout
 import io.moka._
 import org.mongodb.scala.bson.annotations.BsonProperty
 import zio.bson.bsonField
+import scala.annotation.meta.field
 
 /** Nested types compiled in this project's main run, so the outer types in its
   * test run see them only through classfiles. None of them needs a moka object:
@@ -35,3 +36,6 @@ final case class Unrenamed(a: Int)
 
 /** Read directly, but its own nested type has an object to compose. */
 final case class DirectWithComposed(@BsonProperty("o") obj: ObjectInner)
+
+/** No moka object; its rename is meta-annotated onto the field. */
+final case class MetaInner(@(BsonProperty @field)("m") a: Int)
