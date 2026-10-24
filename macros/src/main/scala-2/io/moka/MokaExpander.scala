@@ -167,11 +167,13 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   }
 
   /** Case classes are descended into; value classes are not (a value class is
-    * stored flattened, so its path is the outer field's path).
+    * stored flattened, so its path is the outer field's path). A symbol from a
+    * classfile has no flags until its info is loaded, so `isCaseClass` would be
+    * false for a type no other code has touched yet.
     */
   private def isDescendable(t: Type): Boolean = {
     val s = t.dealias.typeSymbol
-    s.isClass && s.asClass.isCaseClass && !(t.dealias <:< anyValTpe)
+    s.isClass && { s.info; s.asClass.isCaseClass } && !(t.dealias <:< anyValTpe)
   }
 
   private def key(t: Type): String = t.typeSymbol.fullName
