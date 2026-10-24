@@ -1,7 +1,7 @@
 package io.moka
 
 /** Root of a generated `Fields` object. Carries no path of its own, so a
-  * top-level field may still be named `path`.
+  * top-level field may still be named `_path`.
   *
   * A Scala 3 expression macro cannot introduce definitions — an object returned
   * from an expression has its type widened to `Object` at the binding site and

@@ -60,7 +60,7 @@ share only their public surface. Internally they have nothing in common:
   `object Fields { val a: "a" = "a"; ... }`.
 - **Scala 3** — `@moka` is an inert `StaticAnnotation`. The work is done by
   `transparent inline def generateFields[T]`, a typer-time macro returning a `FieldNames`
-  (a `Selectable` over a `Map[String, String]`) whose type is a `Refinement` chain adding one
+  (a `Selectable` over a `Map[String, Any]`) whose type is a `Refinement` chain adding one
   `ConstantType` member per case field.
 
 So **every behaviour change must be made twice**, and the shared suite
@@ -115,8 +115,8 @@ definitions files *are* the compile-time half of the test.
   the reason for nested composition below.
 - Existing companion members survive; one named like a generated object is an error. A custom
   object name comes from `@moka("Name")` on Scala 2, from the val name on Scala 3.
-- The root `Fields` deliberately has **no** `path` member, so a field actually named `path`
-  cannot collide with the accessor.
+- The root `Fields` deliberately has **no** `_path` member (it addresses no sub-document), so
+  a top-level field named `_path` cannot collide with an accessor.
 
 **Nested descent.** A field whose type is a case class becomes a *node*, not a leaf `String`:
 a real nested object extending `FieldPath` on Scala 2, a recursive `Refinement` over
@@ -180,7 +180,9 @@ typo-doesn't-compile demo.
 - **The Scala 2 macro cannot see sibling types.** `c.typecheck` inside the pre-typer annotation
   macro fails for a type declared as a member of the *same enclosing object or class* as the
   annotated case class — the boundary is the enclosing owner, not the file, and declaration
-  order is irrelevant. Top-level types in the same file, and types in other files, resolve
+  order is irrelevant. A sibling that shadows an outer type of the same simple name would make
+  `c.typecheck` resolve to the *outer* type, so sibling names are checked first (`siblingNames`,
+  via the deprecated `c.enclosingClass`). Top-level types in the same file, and types in other files, resolve
   fine. moka aborts with a diagnostic rather than degrading to a leaf. Mutually recursive
   models cannot be expanded at all on Scala 2 (re-entrant expansion → `StackOverflowError`).
 - **sbt 2 restores stale compile outputs from its cache, even after `clean`.** Outputs live in

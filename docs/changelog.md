@@ -22,6 +22,11 @@ sidebar_position: 6
   incremental build was silently dropped, giving a wrong path.
 - Java `@BsonProperty(value = "x")` with named arguments.
 - `@BsonProperty("")` keeps the field name instead of producing `""`.
+- Scala 2.13: meta-annotated renames such as `@(BsonProperty @field)("x")` were
+  ignored.
+- Scala 2.13: a type declared beside the annotated class, sharing its name with
+  an outer type, silently produced the outer type's names; it is now an error.
+- Scala 2.13: `@moka` on a generic case class gives a clear error.
 
 ### Breaking changes and migration
 
