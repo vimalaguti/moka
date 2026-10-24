@@ -19,16 +19,4 @@ class Scala2LimitationsSpec extends munit.FunSuite {
     assert(errors.nonEmpty, diags)
     assert(errors.forall(_.contains("-Ymacro-annotations")), errors)
   }
-
-  // Resolving B re-enters A's own expansion: StackOverflowError in the compiler.
-  test("L-mutual: a mutually recursive pair expands".ignore) {
-    val diags = CompileHarness.compile("Mutual.scala" -> """
-      package mutual
-      import io.moka._
-
-      @moka final case class A(b: Option[B])
-      @moka final case class B(a: Option[A])
-    """)
-    assertEquals(diags.filter(_.severity == "ERROR"), Nil)
-  }
 }

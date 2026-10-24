@@ -190,7 +190,9 @@ typo-doesn't-compile demo.
   `c.typecheck` resolve to the *outer* type, so sibling names are checked first (`siblingNames`,
   via the deprecated `c.enclosingClass`). Top-level types in the same file, and types in other files, resolve
   fine. moka aborts with a diagnostic rather than degrading to a leaf. Mutually recursive
-  models cannot be expanded at all on Scala 2 (re-entrant expansion → `StackOverflowError`).
+  models cannot be expanded at all on Scala 2: resolving one re-enters the other's expansion.
+  `expand` keeps a per-thread stack of expansions in progress to catch that and report the
+  cycle (`A -> B -> A`); without it the compiler overflows its stack.
 - **sbt 2 restores stale compile outputs from its cache, even after `clean`.** Outputs live in
   the content-addressed `~/.cache/sbt/v2/cas` (`target/out/**` are symlinks into it), and the
   cache key does not notice that an in-build macro changed. After a macro edit, tests can run

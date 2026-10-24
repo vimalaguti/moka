@@ -249,4 +249,21 @@ class Scala2CompositionSpec extends munit.FunSuite {
       warnings
     )
   }
+
+  // Resolving B re-enters A's own expansion; unguarded, the compiler overflows
+  // its stack (KNOWN_LIMITATIONS.md, L-mutual).
+  test("a mutually recursive pair is a clear error, not a StackOverflowError") {
+    val diags = CompileHarness.compile("Mutual.scala" -> """
+      package mutual
+      import io.moka._
+
+      @moka final case class A(b: Option[B])
+      @moka final case class B(a: Option[A])
+    """)
+    val errors = diags.filter(_.severity == "ERROR").map(_.msg)
+    assert(errors.nonEmpty, diags)
+    assert(errors.exists(_.contains("A -> B -> A is a cycle")), errors)
+    assert(errors.exists(_.contains("B -> A -> B is a cycle")), errors)
+    assert(errors.forall(!_.contains("same enclosing object")), errors)
+  }
 }

@@ -31,6 +31,8 @@ sidebar_position: 6
 - Scala 2.13: a type declared beside the annotated class, sharing its name with
   an outer type, silently produced the outer type's names; it is now an error.
 - Scala 2.13: `@moka` on a generic case class gives a clear error.
+- Scala 2.13: mutually recursive case classes give a clear error naming the
+  cycle instead of crashing the compiler with `StackOverflowError`.
 - Scala 2.13: a nested node two levels below a type from another run became a
   plain string.
 - Scala 2.13: a node's `toString` was an object reference; on both versions it
