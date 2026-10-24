@@ -67,10 +67,24 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     s == "moka.descendUnannotated" || s == "moka.descendUnannotated=true"
   }
 
+  /** A nested type that has no moka object to compose, and where it is. */
+  private final class Missing(
+      val name: String,
+      val at: String,
+      val generic: Boolean,
+      val failed: Boolean,
+      val pos: Position
+  )
+
   /** What one generated object depended on. */
   private final class Acc {
     var renamed: Boolean = false
     val warned           = scala.collection.mutable.Set.empty[Symbol]
+    val missing = scala.collection.mutable.LinkedHashMap.empty[String, Missing]
+    // the annottee's own fields renamed for this format, and for the other one
+    val ownRenamed         = scala.collection.mutable.ListBuffer.empty[String]
+    val otherRenamed       = scala.collection.mutable.ListBuffer.empty[String]
+    var otherPos: Position = NoPosition
   }
 
   // ---------------------------------------------------------------------------
@@ -338,21 +352,94 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     }
   }
 
-  private def missingObject(tpe: Type, format: Format, pos: Position) = {
-    val n = tpe.typeSymbol.name.decodedName.toString
-    val generic =
-      if (tpe.typeSymbol.asClass.typeParams.nonEmpty)
-        s" $n is generic, so it cannot carry one: use the opt-out."
-      else
-        s" Add ${format.annotation} to $n and `val ${format.defaultObject} = ${format.placeholder}[$n]` to its companion object" +
-          " (objects compiled by moka 0.1.x carry no marker: recompile them)."
-    c.abort(
-      pos,
-      s"moka: nested type $n has no ${format.label} moka object, and on Scala 2.13 its renaming annotations " +
-        "may be lost from its classfile." + generic +
-        " Or compile with -Xmacro-settings:moka.descendUnannotated to read its annotations anyway."
+  private lazy val notGenerated =
+    c.mirror.staticClass("io.moka.FieldsNotGenerated_AddYmacroAnnotations")
+
+  /** `cls` is from this run and carries a moka annotation or placeholder that
+    * did not expand: its own expansion failed and reported why.
+    */
+  private def expansionFailed(cls: ClassSymbol): Boolean =
+    cls.pos != NoPosition && {
+      cls.info
+      val annotated = cls.annotations.exists(a =>
+        mokaAnnotations.contains(
+          a.tree.tpe.typeSymbol.name.decodedName.toString
+        )
+      )
+      val companion = cls.companion
+      annotated || (companion.isModule && companion.info.decls.exists { d =>
+        d.isMethod && d.info.finalResultType.typeSymbol == notGenerated
+      })
+    }
+
+  /** Records `tpe`, which has no object for `format`, and every descendable
+    * type below it that has none either: `tpe` will need its own object, and so
+    * will they, so one error can name them all.
+    */
+  private def recordMissing(
+      tpe: Type,
+      path: String,
+      seen: Set[String],
+      format: Format,
+      pos: Position,
+      acc: Acc
+  ): Unit = if (!acc.missing.contains(key(tpe))) {
+    val cls    = tpe.typeSymbol.asClass
+    val failed = expansionFailed(cls)
+    acc.missing(key(tpe)) = new Missing(
+      cls.name.decodedName.toString,
+      path,
+      cls.typeParams.nonEmpty,
+      failed,
+      pos
     )
+    // a failed expansion already reported what is missing below it
+    if (!failed) params(tpe).foreach { p =>
+      val (pt, _) = unwrap(paramType(p, tpe))
+      if (
+        isDescendable(pt) && !seen(key(pt)) && lookup(
+          pt,
+          format,
+          pos,
+          acc
+        ).isEmpty
+      )
+        recordMissing(
+          pt,
+          pathOf(path, p.name.decodedName.toString),
+          seen + key(pt),
+          format,
+          pos,
+          acc
+        )
+    }
   }
+
+  private def reportMissing(format: Format, acc: Acc): Unit =
+    if (acc.missing.nonEmpty) {
+      val all  = acc.missing.values.toList
+      val todo = all.filterNot(_.failed)
+      val lines = all.map { m =>
+        val fix =
+          if (m.failed)
+            s"it carries a moka annotation, but its own expansion failed: fix the error reported at ${m.name}"
+          else if (m.generic)
+            "it is generic, so it cannot carry one: only the opt-out reaches it"
+          else s"add ${format.annotation}"
+        s"\n  - ${m.name} (at ${m.at}): $fix"
+      }
+      val tail =
+        if (todo.isEmpty) ""
+        else
+          s"\nIn cross-compiled sources, also add `val ${format.defaultObject} = ${format.placeholder}[T]` to each " +
+            "companion. Objects compiled by moka 0.1.x carry no marker: recompile them. Or compile with " +
+            "-Xmacro-settings:moka.descendUnannotated to read their annotations anyway."
+      c.abort(
+        all.head.pos,
+        s"moka: nested types without a ${format.label} moka object (on Scala 2.13 their renaming annotations " +
+          "may be lost from classfiles):" + lines.mkString + tail
+      )
+    }
 
   // ---------------------------------------------------------------------------
   // Descent
@@ -386,7 +473,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         }
         acc.renamed = true // never neutral under the opt-out
         direct(term, tpe, path, seen, isArray, format, pos, acc)
-      case None => missingObject(tpe, format, pos)
+      case None =>
+        recordMissing(tpe, path, seen, format, pos, acc)
+        leaf(term, path) // never emitted: reportMissing aborts
     }
 
   /** Shape from the outer, names from `N`'s object: `names` is a node of it (at
@@ -566,6 +655,12 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       val fieldName = vd.name.decodedName.toString
       val renames   = renamesFromMods(vd.mods)
       if (renames.nonEmpty) acc.renamed = true
+      if (renames.exists(r => format.renaming(r._1)))
+        acc.ownRenamed += fieldName
+      else if (renames.nonEmpty) {
+        if (acc.otherRenamed.isEmpty) acc.otherPos = vd.pos
+        acc.otherRenamed += fieldName
+      }
       val path = resolveName(vd.pos, fieldName, renames, format)
       val term = TermName(fieldName)
       val tpt  = vd.tpt
@@ -611,10 +706,25 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       name: TermName,
       className: TypeName,
       fields: List[ValDef],
-      format: Format
+      format: Format,
+      formats: Set[Format]
   ): Tree = {
-    val acc    = new Acc
-    val terms  = fieldNames(className, fields, format, acc)
+    val acc   = new Acc
+    val terms = fieldNames(className, fields, format, acc)
+    reportMissing(format, acc)
+    val other = if (format == Bson) Json else Bson
+    // generating the other format's object too says the ignoring is deliberate
+    if (
+      acc.ownRenamed.isEmpty && acc.otherRenamed.nonEmpty && !formats(other)
+    ) {
+      c.warning(
+        acc.otherPos,
+        s"moka: $className's fields are renamed only by ${other.label} annotations " +
+          s"(${acc.otherRenamed.mkString(", ")}), which its ${format.label} object $name ignores: its names " +
+          s"are the Scala field names. If the documents use the ${other.label} names, generate them with " +
+          s"${other.placeholder} or ${other.annotation}."
+      )
+    }
     val marker = if (acc.renamed) format.marker else neutralMarker
     q"object $name extends ${marker} { ..$terms }"
   }
@@ -741,8 +851,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       case _ => ()
     }
 
+    val formats = generated.map(_._2).toSet
     def build(name: String, format: Format) =
-      rootObject(TermName(name), className, firstParams, format)
+      rootObject(TermName(name), className, firstParams, format, formats)
 
     val newStats =
       if (placeholders.nonEmpty)

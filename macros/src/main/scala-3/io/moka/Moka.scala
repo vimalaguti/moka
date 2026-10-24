@@ -53,6 +53,10 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     */
   var renamed = false
 
+  // the root's own fields renamed for this mode's format, and for the other one
+  val ownRenamed   = scala.collection.mutable.ListBuffer.empty[String]
+  val otherRenamed = scala.collection.mutable.ListBuffer.empty[String]
+
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =
       owner.primaryConstructor.paramSymss.flatten.find(_.name == field.name)
@@ -82,6 +86,9 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
         extracted.filter((ann, _) => bsonAnnotations.contains(ann))
       case RenamingMode.JsonOnly =>
         extracted.filter((ann, _) => jsonAnnotations.contains(ann))
+    if owner == rootTpe.typeSymbol then
+      if filtered.nonEmpty then ownRenamed += field.name
+      else if extracted.nonEmpty then otherRenamed += field.name
 
     val distinctValues = filtered.map(_._2).distinct
     if distinctValues.isEmpty then field.name
@@ -192,6 +199,16 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
 
   val (refined, node) =
     build(rootTpe, "", Set(rootTpe.typeSymbol.fullName), isArray = false)
+
+  if ownRenamed.isEmpty && otherRenamed.nonEmpty then
+    val (label, otherLabel, otherCall) = mode match
+      case RenamingMode.BsonOnly => ("BSON", "JSON", "generateJsonFields")
+      case RenamingMode.JsonOnly => ("JSON", "BSON", "generateBsonFields")
+    report.warning(
+      s"moka: ${rootTpe.typeSymbol.name}'s fields are renamed only by $otherLabel annotations " +
+        s"(${otherRenamed.mkString(", ")}), which $methodName ignores for $label names: its names are the " +
+        s"Scala field names. If the documents use the $otherLabel names, use $otherCall."
+    )
   refined.asType match
     case '[t] =>
       '{ ${ node.asExprOf[FieldNames] }.asInstanceOf[t & FieldNames] }

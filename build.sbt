@@ -78,7 +78,25 @@ lazy val examples = project
     // read by the 3.3 LTS compiler (TASTy 28.5 vs the 28.3 it expects).
     libraryDependencies += "dev.zio"       %% "zio-bson" % "1.0.6",
     libraryDependencies += "dev.zio"       %% "zio-json" % "1.0.0",
-    libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test
+    libraryDependencies += "org.scalameta" %% "munit"    % "1.1.1" % Test,
+    // CompileHarness runs the compiler in-process to see every diagnostic,
+    // warnings included: munit's compileErrors stops at the first macro abort
+    // and never shows warnings. It reads the classpath from a generated resource.
+    libraryDependencies += {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 13)) =>
+          "org.scala-lang" % "scala-compiler" % scalaVersion.value % Test
+        case _ =>
+          "org.scala-lang" %% "scala3-compiler" % scalaVersion.value % Test
+      }
+    },
+    Test / resourceGenerators += Def.task {
+      val conv = fileConverter.value
+      val cp  = (Test / dependencyClasspath).value.map(a => conv.toPath(a.data))
+      val out = (Test / resourceManaged).value / "moka-compile-classpath.txt"
+      IO.write(out, cp.mkString(java.io.File.pathSeparator))
+      Seq(out)
+    }.taskValue
   )
   .dependsOn(macros)
 

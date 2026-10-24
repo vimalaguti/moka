@@ -25,6 +25,8 @@ final case class JsonOnlyFruit(
     @jsonField("fruit_kind") kind: String
 )
 object JsonOnlyFruit {
+  // ignoring @jsonField is the point here; Scala 2 sees JsonFields and does not warn
+  @scala.annotation.nowarn("msg=moka")
   val Fields     = generateFields[JsonOnlyFruit]
   val JsonFields = generateJsonFields[JsonOnlyFruit]
 }
