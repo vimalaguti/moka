@@ -7,7 +7,7 @@ and the version pages.
 
 | ID | Ver. | Limitation | Test | Status |
 |---|---|---|---|---|
-| L-stale | 3, 2.13 | After a rename changes, code in another file than the renamed type keeps the old literal until recompiled, in the same or another module: an outer type nesting it, or a `generateFields[T]` call outside `T`'s file. A rename is not an API change for zinc. Silent: queries match nothing. On 2.13 the composed `N.Obj.member` reference does not change that. | `incremental/src/sbt-test/`: `scala3/nested-other-file`, `scala3/other-file`, `scala3/other-module`, `scala2/nested-other-file` (all `pending`); `scala3/other-module-companion` passes (a val in `T`'s companion is current) | **open**, see To do |
+| L-stale | 3, 2.13 | After a rename changes, code in another file than the renamed type keeps the old literal until recompiled, in the same or another module: an outer type nesting it, or a `generateFields[T]` call outside `T`'s file. A rename is not an API change for zinc. Silent: queries match nothing. On 2.13 the composed `N.Obj.member` reference does not change that. | `incremental/src/sbt-test/`: `scala3/nested-other-file`, `scala3/other-file`, `scala3/other-module`, `scala2/nested-other-file` (all `pending`); `scala3/other-module-companion` passes (a val in `T`'s companion is current) | accepted for 0.2.0: clean build after a rename (documented); fix tracked in issue #24 |
 | L-mutual | 2.13 | Mutually recursive models cannot expand (`StackOverflowError` in the compiler). | `Scala2LimitationsSpec` "L-mutual" (ignored) | accepted |
 | L-sibling | 2.13 | A nested type declared in the same object or class as the annottee is invisible to the macro. | `Scala2MokaSpec` "a nested type declared beside the annottee is rejected"; `Scala2ReviewSpec` "sibling shadowing ..." | accepted, clear error |
 | L-generic | 2.13 | A generic nested type cannot carry a moka object; only the global opt-out reaches it. | `Scala2CompositionSpec` "a generic nested type cannot be composed ..."; `OptOutSpec` "a generic nested type is read ..." | accepted, clear error |
@@ -33,13 +33,8 @@ and errors after a first macro abort.
 - [x] **L-stale, call-site spike** (failed). Dead selections of every read
       field in the Scala 3 expansion change nothing: zinc's debug log shows no
       API change at all for the renamed type, so no use of it can invalidate.
-- [ ] **L-stale, decide.** A fix needs something in the renamed type's own
-      file whose API changes with the rename, referenced by every user: e.g.
-      require (or generate, on 2.13) a moka val in every nested type's
-      companion and reference it from outers on both versions — the composition
-      Scala 3 rejected for `CyclicReference` — and find why 2.13's existing
-      `N.Obj.member` reference does not invalidate. Otherwise: document a clean
-      build after a rename as the rule.
+- [x] **L-stale, decide.** For 0.2.0 a clean build after a rename is the
+      documented rule; the redesign it would take is issue #24.
 - [ ] Re-test the snapshot on the real projects.
 - [ ] After merge: tag `v0.2.0` (`RELEASING.md`), date the changelog heading,
       publish gh-pages from the tagged checkout.
