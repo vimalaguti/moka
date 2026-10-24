@@ -44,11 +44,12 @@ scalacOptions ++= (CrossVersion.partialVersion(scalaVersion.value) match {
 })
 ```
 
-To rename the generated object in cross-compiled sources, rename the val and
-pass the same name to the annotation (used by Scala 2 only):
+To rename the generated object in cross-compiled sources, rename the val: its
+name is the object's name on both versions (on Scala 2 an annotation argument
+such as `@moka("Params")` is ignored once placeholders are present):
 
 ```scala mdoc
-@moka("Params")
+@moka
 case class Renamed(a: Int)
 object Renamed {
   val Params = generateFields[Renamed]
