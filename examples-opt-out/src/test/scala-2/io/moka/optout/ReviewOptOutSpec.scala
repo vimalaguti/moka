@@ -29,8 +29,8 @@ class ReviewOptOutSpec extends munit.FunSuite {
     )
   }
 
-  // Deferred: with @field the annotation lands on the field symbol, not the constructor parameter that symbol reading inspects.
-  test("3b: a nested type's meta-annotated rename is read".ignore) {
+  // With @field the annotation lands on the field symbol, not the parameter.
+  test("3b: a nested type's meta-annotated rename is read") {
     assertEquals(
       compileErrors("""val x: "inner.m" = MetaOuter.Fields.inner.a"""),
       ""

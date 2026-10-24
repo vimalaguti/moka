@@ -577,6 +577,16 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     nodeObjectWith(term, path, pathMember, members ::: arrayOps)
   }
 
+  /** The underlying field of a case class parameter: a meta-annotated rename
+    * such as `@(BsonProperty @field)("x")` lands there, not on the parameter.
+    */
+  private def fieldSymbol(tpe: Type, name: String): Option[Symbol] = {
+    val getter = tpe.dealias.member(TermName(name))
+    if (getter.isMethod && getter.asMethod.isGetter)
+      Some(getter.asMethod.accessed).filter(_ != NoSymbol)
+    else None
+  }
+
   /** Reads a nested type's annotations, under the opt-out only. */
   private def direct(
       term: TermName,
@@ -591,8 +601,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     val members = params(tpe).map { p =>
       val fieldName = p.name.decodedName.toString
       val ppos      = if (p.pos != NoPosition) p.pos else pos
-      val ppath =
-        pathOf(path, resolveName(ppos, fieldName, renamesFromSymbol(p), format))
+      val renames = (renamesFromSymbol(p) ++ fieldSymbol(tpe, fieldName).toList
+        .flatMap(renamesFromSymbol)).distinct
+      val ppath = pathOf(path, resolveName(ppos, fieldName, renames, format))
       val (pt, arr) = unwrap(paramType(p, tpe))
       if (isDescendable(pt) && !seen(key(pt)))
         descend(

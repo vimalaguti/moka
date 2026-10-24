@@ -27,7 +27,7 @@ sidebar_position: 6
 - Java `@BsonProperty(value = "x")` with named arguments.
 - `@BsonProperty("")` keeps the field name instead of producing `""`.
 - Scala 2.13: meta-annotated renames such as `@(BsonProperty @field)("x")` were
-  ignored.
+  ignored, on the annotated class and, under the opt-out, on nested types.
 - Scala 2.13: a type declared beside the annotated class, sharing its name with
   an outer type, silently produced the outer type's names; it is now an error.
 - Scala 2.13: `@moka` on a generic case class gives a clear error.
