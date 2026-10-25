@@ -150,77 +150,74 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   def onPath(t: TypeRepr, path: List[TypeRepr]): Boolean =
     path.find(_.typeSymbol == t.typeSymbol).exists(p => size(t) >= size(p))
 
-  /** Returns the refined type of the node addressing `prefix`, paired with the
-    * expression building it. `prefix` is empty only for the root.
+  /** Returns the refined type of the node addressing `prefix`, paired with its
+    * encoding for `FieldNames` to decode. `prefix` is empty only for the root.
     */
   def build(
       tpe: TypeRepr,
       prefix: String,
       seen: List[TypeRepr],
       isArray: Boolean
-  ): (TypeRepr, Expr[Any]) =
+  ): (TypeRepr, String) =
     val owner = tpe.dealias.typeSymbol
+    def member(name: String, seg: String, kind: String) =
+      name + FieldNames.Sep + seg + FieldNames.Sep + kind
     val entries = owner.caseFields.map { field =>
-      val path =
-        if prefix.isEmpty then bsonName(owner, field)
-        else prefix + "." + bsonName(owner, field)
+      val seg  = bsonName(owner, field)
+      val path = if prefix.isEmpty then seg else prefix + "." + seg
       val (fieldTpe, fieldIsArray) = unwrap(tpe.dealias.memberType(field))
       if isDescendable(fieldTpe) && !onPath(fieldTpe, seen) then
-        val (childTpe, childExpr) =
+        val (childTpe, child) =
           build(fieldTpe, path, fieldTpe :: seen, fieldIsArray)
-        (field.name, childTpe, childExpr)
+        (field.name, childTpe, member(field.name, seg, "N" + child))
       else
-        (field.name, ConstantType(StringConstant(path)), Expr(path): Expr[Any])
+        (
+          field.name,
+          ConstantType(StringConstant(path)),
+          member(field.name, seg, "L")
+        )
     }
 
     // MongoDB's array operators. Neither is itself an array, so they do not
     // nest further.
     val arrayOps =
       if isArray then
-        List("_matched" -> (prefix + ".$"), "_all" -> (prefix + ".$[]")).map {
-          (name, opPath) =>
-            val (opTpe, opExpr) = build(tpe, opPath, seen, false)
-            (name, opTpe, opExpr)
+        List("_matched" -> "$", "_all" -> "$[]").map { (name, seg) =>
+          val (opTpe, op) = build(tpe, prefix + "." + seg, seen, false)
+          (name, opTpe, member(name, seg, "N" + op))
         }
       else Nil
     val members = entries ++ arrayOps
 
-    val children = Expr.ofList(members.map { case (name, _, value) =>
-      '{ (${ Expr(name) }, $value) }
-    })
     // Only the root carries a marker. Every descendant is built above, so
     // `renamed` is final by the time the root reads it.
-    val (base, node) =
+    val base =
       if prefix.isEmpty then
-        if !renamed then
-          (
-            TypeRepr.of[FieldNames & MokaNames],
-            '{ FieldNames.neutral($children.toMap) }
-          )
+        if !renamed then TypeRepr.of[FieldNames & MokaNames]
         else
           mode match
             case RenamingMode.BsonOnly =>
-              (
-                TypeRepr.of[FieldNames & MokaBsonNames],
-                '{ FieldNames.bson($children.toMap) }
-              )
+              TypeRepr.of[FieldNames & MokaBsonNames]
             case RenamingMode.JsonOnly =>
-              (
-                TypeRepr.of[FieldNames & MokaJsonNames],
-                '{ FieldNames.json($children.toMap) }
-              )
-      else
-        (
-          pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix))),
-          '{ PathNode(${ Expr(prefix) }, $children.toMap) }
-        )
+              TypeRepr.of[FieldNames & MokaJsonNames]
+      else pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
     val refined = members.foldLeft(base) { case (acc, (name, tpe, _)) =>
       Refinement(acc, name, tpe)
     }
-    (refined, node)
+    (refined, members.length.toString + ";" + members.map(_._3).mkString)
 
-  val (refined, node) =
+  val (refined, tree) =
     build(rootTpe, "", List(rootTpe), isArray = false)
+
+  // A JVM string constant holds at most 65535 bytes of modified UTF-8, where a
+  // char takes up to 3; a split surrogate pair is rejoined on decoding.
+  val chunks = Varargs(tree.grouped(20000).map(Expr(_)).toList)
+  val root =
+    if !renamed then '{ FieldNames.neutral($chunks*) }
+    else
+      mode match
+        case RenamingMode.BsonOnly => '{ FieldNames.bson($chunks*) }
+        case RenamingMode.JsonOnly => '{ FieldNames.json($chunks*) }
 
   if ownRenamed.isEmpty && otherRenamed.nonEmpty then
     val (label, otherLabel, otherCall) = mode match
@@ -233,5 +230,4 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
       otherPos
     )
   refined.asType match
-    case '[t] =>
-      '{ ${ node.asExprOf[FieldNames] }.asInstanceOf[t & FieldNames] }
+    case '[t] => '{ $root.asInstanceOf[t & FieldNames] }
