@@ -236,10 +236,11 @@ Rename `diameter`, or change its `@BsonProperty`, and all three of those stop
 compiling rather than silently matching nothing.
 
 Descent stops at value classes (stored flattened, so the path is the outer
-field's), at `Map` (naming a value needs a key), and at any type already on the
-path, so recursive models terminate. On Scala 2.13 — and so in cross-compiled
-sources — every nested case class needs its own moka object, and may not be
-declared beside the annotated class — see
+field's), at `Map` (naming a value needs a key, so `IntMap`/`LongMap` too), and
+at any type already on the path, so recursive models terminate. A generic type
+may nest a smaller instance of itself: `Box[Box[X]]` descends to `X`. On Scala
+2.13 — and so in cross-compiled sources — every nested case class needs its own
+moka object, and may not be declared beside the annotated class — see
 [cross-compilation](cross.md#nested-types-on-scala-2).
 
 ## Using a node as a string

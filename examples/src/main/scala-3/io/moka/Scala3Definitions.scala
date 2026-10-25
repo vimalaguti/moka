@@ -78,6 +78,28 @@ object S3CycleN {
   val Fields = generateFields[S3CycleN]
 }
 
+/** A type alias as the root is dealiased. */
+final case class S3Aliased(@BsonProperty("r") a: Int)
+type S3Alias = S3Aliased
+object S3AliasUse {
+  val Fields = generateFields[S3Alias]
+}
+
+/** A generic type nesting a smaller instance of itself is descended into. */
+final case class S3Box[T](value: T)
+final case class S3Leaf(@BsonProperty("xx") x: Int)
+final case class S3BoxBox(b: S3Box[S3Box[S3Leaf]])
+object S3BoxBox {
+  val Fields = generateFields[S3BoxBox]
+}
+
+/** Polymorphic recursion grows the type at each level: it must stop. */
+final case class S3Grow[A](next: Option[S3Grow[List[A]]], a: Option[A])
+final case class S3GrowRoot(g: S3Grow[S3Leaf])
+object S3GrowRoot {
+  val Fields = generateFields[S3GrowRoot]
+}
+
 /** Opaque types are leaves, even over a case class. */
 object S3Opaques {
   opaque type Code = String

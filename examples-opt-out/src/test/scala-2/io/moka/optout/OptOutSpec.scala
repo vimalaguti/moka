@@ -21,6 +21,12 @@ object OptOutOuter {
 }
 
 @moka
+final case class BoxBoxOuter(b: Box[Box[PlainInner]], g: Grow[PlainInner])
+object BoxBoxOuter {
+  val Fields = generateFields[BoxBoxOuter]
+}
+
+@moka
 final case class UnrenamedOuter(inner: Unrenamed)
 object UnrenamedOuter {
   val Fields = generateFields[UnrenamedOuter]
@@ -63,6 +69,17 @@ class OptOutSpec extends munit.FunSuite {
 
   test("a generic nested type is read from its annotations") {
     assertEquals(OptOutOuter.Fields.box.value, "box.v")
+  }
+
+  test("a generic type nested in a smaller instance of itself descends") {
+    val a: "b.v.v.p" = BoxBoxOuter.Fields.b.value.value.a
+    assertEquals(a, "b.v.v.p")
+  }
+
+  test("a type growing at each level (polymorphic recursion) stops") {
+    val next: "g.next" = BoxBoxOuter.Fields.g.next
+    assertEquals(next, "g.next")
+    assertEquals(BoxBoxOuter.Fields.g.a.a, "g.a.p")
   }
 
   test("below a type read directly, a nested object is composed") {

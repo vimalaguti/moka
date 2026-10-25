@@ -12,7 +12,6 @@ and the version pages.
 | L-sibling | 2.13 | A nested type declared in the same object or class as the annottee is invisible to the macro. | `Scala2MokaSpec` "a nested type declared beside the annottee is rejected"; `Scala2ReviewSpec` "sibling shadowing ..." | accepted, clear error |
 | L-generic | 2.13 | A generic nested type cannot carry a moka object; only the global opt-out reaches it. | `Scala2CompositionSpec` "a generic nested type cannot be composed ..."; `OptOutSpec` "a generic nested type is read ..." | accepted, clear error |
 | L-noflag | 2.13 | `@moka` alone without `-Ymacro-annotations` gives `not found: value Fields`, naming no flag. | `Scala2LimitationsSpec` "L-noflag" (ignored) | accepted, documented |
-| L-samename | 2.13 | A same-named class from another package is descended into. | `Scala2ReviewSpec` "2.5: ..." (ignored) | deferred: the path is correct today |
 | L-typo | 3 | A typo's error prints the whole generated refinement type. | `Scala3LimitationsSpec` "L-typo" (ignored) | accepted |
 | L-semanticdb | 3 | Applying `io.moka.syntax`'s conversion, or interpolating a node, breaks SemanticDB extraction for the file (a warning; Metals loses navigation there). | none: seen in the `MokaSpec` build, not reproduced in `CompileHarness` | accepted, documented |
 | L-warn-both | 3 | The wrong-format warning fires even when the companion also generates the other format (2.13 skips it); `@nowarn` silences it. | none | accepted |

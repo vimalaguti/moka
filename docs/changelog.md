@@ -33,6 +33,14 @@ sidebar_position: 6
 - Scala 2.13: `@moka` on a generic case class gives a clear error.
 - Scala 2.13: mutually recursive case classes give a clear error naming the
   cycle instead of crashing the compiler with `StackOverflowError`.
+- Scala 3: `generateFields` on a type alias of a case class.
+- `IntMap` and `LongMap` fields were descended into as collections; like `Map`,
+  they are now leaves.
+- A generic type nested in itself (`Box[Box[X]]`) stopped at the inner `Box`
+  as if it were a cycle.
+- Scala 2.13: a field typed as another package's class of the same name
+  (`case class Event(prev: legacy.Event)`) was a leaf; it is now composed,
+  as on Scala 3.
 - Scala 2.13: a nested node two levels below a type from another run became a
   plain string.
 - Scala 2.13: a node's `toString` was an object reference; on both versions it
@@ -69,6 +77,12 @@ On both versions:
   (0.1.0 used the first). Keep one.
 - Scala 2.13: a companion member named like a generated object (e.g. your own
   `object Fields`) is a compile error. Rename it.
+- An `IntMap`/`LongMap` field is a leaf: `m.x`, `m._matched` and `m._all` no
+  longer exist. Address its values as with any `Map`.
+- `Box[Box[X]]` descends into the inner `Box`, so its field is a node: use
+  `b._path` where the field itself was used as a string.
+- Scala 2.13: a field typed as another package's same-named class is a node
+  (or needs that class's moka object), not a leaf.
 
 After changing a renaming annotation, **do a clean build**: code in other files
 keeps the old name otherwise

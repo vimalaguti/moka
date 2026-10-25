@@ -215,11 +215,12 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
 
   private val optionSym   = c.mirror.staticClass("scala.Option")
   private val iterableSym = c.mirror.staticClass("scala.collection.Iterable")
+  private val mapSym      = c.mirror.staticClass("scala.collection.Map")
   private val anyValTpe   = c.mirror.staticClass("scala.AnyVal").toType
 
   /** `Option` and single-element collections are transparent: MongoDB's dot
     * notation is the same whether a sub-document is optional, in an array, or
-    * neither. `Map` has two type arguments and is left alone.
+    * neither. A `Map` is never one, even with one type argument (`IntMap[V]`).
     *
     * Returns the element type and whether a collection was crossed on the way
     * to it, which is what decides whether the field gets the array operators.
@@ -231,7 +232,10 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     val d = t.dealias
     if (d.typeArgs.size == 1 && d.typeSymbol == optionSym)
       unwrap(d.typeArgs.head, sawCollection)
-    else if (d.typeArgs.size == 1 && d.baseClasses.contains(iterableSym))
+    else if (
+      d.typeArgs.size == 1 && d.baseClasses.contains(iterableSym) &&
+      !d.baseClasses.contains(mapSym)
+    )
       unwrap(d.typeArgs.head, true)
     else (d, sawCollection)
   }
@@ -247,6 +251,18 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   }
 
   private def key(t: Type): String = t.typeSymbol.fullName
+
+  private def size(t: Type): Int = 1 + t.dealias.typeArgs.map(size).sum
+
+  /** Whether descending into `t` would repeat a type on `path` (nearest first).
+    * A generic type may nest a strictly smaller instance of itself
+    * (`Box[Box[X]]`); a growing one (`F[A](x: F[List[A]])`) stops, so every
+    * descent terminates.
+    */
+  private def onPath(t: Type, path: List[Type]): Boolean =
+    path
+      .find(_.typeSymbol == t.typeSymbol)
+      .exists(p => size(t) >= size(p))
 
   private def params(tpe: Type): List[Symbol] =
     tpe.dealias.typeSymbol.asClass.primaryConstructor.asMethod.paramLists.headOption
@@ -436,7 +452,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   private def recordMissing(
       tpe: Type,
       path: String,
-      seen: Set[String],
+      seen: List[Type],
       format: Format,
       pos: Position,
       acc: Acc
@@ -454,7 +470,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     if (!failed) params(tpe).foreach { p =>
       val (pt, _) = unwrap(paramType(p, tpe))
       if (
-        isDescendable(pt) && !seen(key(pt)) && lookup(
+        isDescendable(pt) && !onPath(pt, seen) && lookup(
           pt,
           format,
           pos,
@@ -464,7 +480,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         recordMissing(
           pt,
           pathOf(path, p.name.decodedName.toString),
-          seen + key(pt),
+          pt :: seen,
           format,
           pos,
           acc
@@ -508,7 +524,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       term: TermName,
       tpe: Type,
       path: String,
-      seen: Set[String],
+      seen: List[Type],
       isArray: Boolean,
       format: Format,
       pos: Position,
@@ -545,7 +561,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       base: String,
       names: NNode,
       ref: Option[List[String]],
-      seen: Set[String],
+      seen: List[Type],
       isArray: Boolean,
       root: Boolean,
       pos: Position
@@ -560,7 +576,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       val name         = p.name.decodedName.toString
       val (pt, arr)    = unwrap(paramType(p, tpe))
       val found: Names = names.members.getOrElse(name, mismatch(name))
-      if (isDescendable(pt) && !seen(key(pt))) found match {
+      if (isDescendable(pt) && !onPath(pt, seen)) found match {
         case node: NNode =>
           composed(
             TermName(name),
@@ -568,7 +584,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
             base,
             node,
             ref.map(_ :+ name),
-            seen + key(pt),
+            pt :: seen,
             arr,
             root = false,
             pos
@@ -646,7 +662,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       term: TermName,
       tpe: Type,
       path: String,
-      seen: Set[String],
+      seen: List[Type],
       isArray: Boolean,
       format: Format,
       pos: Position,
@@ -659,12 +675,12 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         .flatMap(renamesFromSymbol)).distinct
       val ppath = pathOf(path, resolveName(ppos, fieldName, renames, format))
       val (pt, arr) = unwrap(paramType(p, tpe))
-      if (isDescendable(pt) && !seen(key(pt)))
+      if (isDescendable(pt) && !onPath(pt, seen))
         descend(
           TermName(fieldName),
           pt,
           ppath,
-          seen + key(pt),
+          pt :: seen,
           arr,
           format,
           pos,
@@ -709,6 +725,27 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     }.toSet
   }
 
+  /** Whether `qual` names the package or object the annottee is declared in, so
+    * that `qual.Self` is the annottee and not another package's same-named
+    * class. Compared syntactically, because typechecking the annottee, or the
+    * object it is declared in, re-enters this expansion. A relative qualifier
+    * matches as a suffix of the owner's full name; one that is not a plain path
+    * is taken as the owner.
+    */
+  private def isAnnotteeOwner(qual: Tree): Boolean = {
+    def path(t: Tree): Option[List[String]] = t match {
+      case Ident(termNames.ROOTPKG) => Some(Nil)
+      case Ident(n)                 => Some(List(n.decodedName.toString))
+      case Select(q, n)             => path(q).map(_ :+ n.decodedName.toString)
+      case _                        => None
+    }
+    val owner = c.internal.enclosingOwner.fullName
+    // a qualifier that is not a plain path stays a self-reference, as before
+    path(qual).map(_.mkString(".")).forall { q =>
+      q == owner || owner.endsWith("." + q)
+    }
+  }
+
   /** The members of one generated root object, from the annottee's untyped
     * parameters.
     */
@@ -737,9 +774,10 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       // annotation expansion, so a self-reference is recognised syntactically
       // and terminates as a leaf.
       val mentionsSelf = tpt.exists {
-        case Ident(n)     => n.decodedName.toString == selfName
-        case Select(_, n) => n.decodedName.toString == selfName
-        case _            => false
+        case Ident(n) => n.decodedName.toString == selfName
+        case Select(qual, n) =>
+          n.decodedName.toString == selfName && isAnnotteeOwner(qual)
+        case _ => false
       }
       // a sibling of the annottee shadows any same-named type outside, but
       // typechecking would find only the outside one
@@ -777,7 +815,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         }
         val (ft, isArray) = unwrap(tpe)
         if (isDescendable(ft))
-          descend(term, ft, path, Set(key(ft)), isArray, format, vd.pos, acc)
+          descend(term, ft, path, List(ft), isArray, format, vd.pos, acc)
         else leaf(term, path)
       }
     }

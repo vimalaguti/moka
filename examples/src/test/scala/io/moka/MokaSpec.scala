@@ -109,6 +109,13 @@ class MokaSpec extends munit.FunSuite {
     assertEquals(keyed, "keyed")
   }
 
+  test("one-argument maps (IntMap, LongMap) stay leaves") {
+    val ints: "ints"                 = IntKeyed.Fields.ints
+    val longs: "longs"               = IntKeyed.Fields.longs
+    val mutableLongs: "mutableLongs" = IntKeyed.Fields.mutableLongs
+    assertEquals((ints, longs, mutableLongs), ("ints", "longs", "mutableLongs"))
+  }
+
   test("nodes convert to their path where a String is expected") {
     import io.moka.syntax._
     def take(s: String): String = s
