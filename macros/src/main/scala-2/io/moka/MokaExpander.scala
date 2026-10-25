@@ -1,6 +1,6 @@
 package io.moka
 
-import scala.reflect.macros.whitebox
+import scala.reflect.macros.{TypecheckException, whitebox}
 
 private[moka] object MokaExpander {
 
@@ -751,21 +751,31 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       }
       if (mentionsSelf) leaf(term, path)
       else {
-        val resolved =
-          if (mentionsSibling) EmptyTree
-          else c.typecheck(tpt.duplicate, c.TYPEmode, silent = true)
-        if (resolved.isEmpty) cycle.get.foreach { chain =>
-          c.abort(vd.pos, cycleMessage(ownCycle.getOrElse(chain)))
+        // A sibling cannot resolve (see `siblingNames`); anything else that
+        // fails gets the typer's own message, which a silent typecheck drops.
+        val resolved: Either[String, Tree] =
+          if (mentionsSibling)
+            Left(
+              "on Scala 2 the annotation macro runs before the typer, so a type declared as a member of the " +
+                s"same enclosing object or class as the annotated case class is invisible to it. Move '$tpt' to " +
+                "package level or into another file."
+            )
+          else
+            try Right(c.typecheck(tpt.duplicate, c.TYPEmode))
+            catch { case e: TypecheckException => Left(e.msg) }
+        val tpe = resolved match {
+          case Right(t) => t.tpe
+          case Left(reason) =>
+            cycle.get.foreach { chain =>
+              c.abort(vd.pos, cycleMessage(ownCycle.getOrElse(chain)))
+            }
+            c.abort(
+              vd.pos,
+              s"moka: cannot resolve type '$tpt' of field '$fieldName' while expanding " +
+                s"${format.annotation} on $selfName: $reason"
+            )
         }
-        if (resolved.isEmpty)
-          c.abort(
-            vd.pos,
-            s"moka: cannot resolve type '$tpt' of field '$fieldName' while expanding @moka on $selfName. " +
-              "On Scala 2 the annotation macro runs before the typer, so a type declared as a member of the " +
-              s"same enclosing object or class as the annotated case class is invisible to it. Move '$tpt' to " +
-              "package level or into another file."
-          )
-        val (ft, isArray) = unwrap(resolved.tpe)
+        val (ft, isArray) = unwrap(tpe)
         if (isDescendable(ft))
           descend(term, ft, path, Set(key(ft)), isArray, format, vd.pos, acc)
         else leaf(term, path)
@@ -787,8 +797,13 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
           case Nil => true
           case Literal(Constant(filter: String)) :: Nil =>
             val parts = filter.split('&').toList
+            // scalac reports an invalid regex itself ("Invalid message
+            // filter"); here it just matches nothing
             parts.forall(_.startsWith("msg=")) && parts.forall { p =>
-              java.util.regex.Pattern.compile(p.drop(4)).matcher(msg).find()
+              scala.util
+                .Try(java.util.regex.Pattern.compile(p.drop(4)))
+                .toOption
+                .exists(_.matcher(msg).find())
             }
           case _ => false
         }

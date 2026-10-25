@@ -37,6 +37,13 @@ sidebar_position: 6
   plain string.
 - Scala 2.13: a node's `toString` was an object reference; on both versions it
   is now its path, so `s"${node}.x"` works.
+- Scala 2.13: a field type that does not resolve (a typo, a missing import)
+  reported the sibling-type limitation instead of the compiler's own error.
+- Scala 2.13: an invalid regex in `@nowarn("msg=...")` crashed the macro.
+- Scala 3: renaming conflicts and the other-format warning point at the field
+  instead of the `generateFields` call. To silence that warning, put `@nowarn`
+  on the case class or the field, as on Scala 2.13; on the
+  `val Fields = generateFields[...]` placeholder it no longer applies.
 
 ### Breaking changes and migration
 

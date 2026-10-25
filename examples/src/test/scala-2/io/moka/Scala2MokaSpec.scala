@@ -57,6 +57,63 @@ class Scala2MokaSpec extends munit.FunSuite {
     """)
     assert(errors.contains("cannot resolve type"), errors)
     assert(errors.contains("same enclosing object"), errors)
+    assert(!errors.contains("not found"), errors)
+  }
+
+  test("an unresolvable field type reports the typer's error at the field") {
+    val diags = CompileHarness.compile("Unresolved.scala" -> """
+      package unresolved
+      import io.moka._
+      object M {
+        @moka final case class Typo(
+          a: Strng
+        )
+        @mokaJson final case class NoImport(
+          b: Instant
+        )
+        def f: Any = {
+          final case class L(x: Int)
+          @moka final case class Local(
+            l: L
+          )
+          Local(L(1))
+        }
+      }
+    """)
+    val moka = diags.filter(_.msg.startsWith("moka:"))
+    assertEquals(moka.length, 3, diags)
+    assert(moka.forall(!_.msg.contains("same enclosing object")), moka)
+    def at(line: Int) = moka.find(_.line == line).map(_.msg).getOrElse("")
+    assert(
+      at(6).endsWith("while expanding @moka on Typo: not found: type Strng"),
+      moka
+    )
+    assert(
+      at(9).contains("@mokaJson on NoImport: not found: type Instant"),
+      moka
+    )
+    assert(at(14).endsWith("on Local: not found: type L"), moka)
+  }
+
+  test("an invalid @nowarn regex is left to scalac and suppresses nothing") {
+    val diags = CompileHarness.compile("BadRegex.scala" -> """
+      package badregex
+      import io.moka._
+      import zio.json.jsonField
+      @scala.annotation.nowarn("msg=renamed[")
+      @moka final case class O(@jsonField("j") a: String)
+    """)
+    assert(
+      diags.forall(!_.msg.contains("exception during macro expansion")),
+      diags
+    )
+    assert(diags.exists(_.msg.startsWith("Invalid message filter")), diags)
+    assert(
+      diags.exists(d =>
+        d.severity == "WARNING" && d.msg.contains("renamed only by JSON")
+      ),
+      diags
+    )
   }
 
   test("@moka generates a companion with nested descent") {

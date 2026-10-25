@@ -42,7 +42,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   val rootTpe = TypeRepr.of[T]
   if !rootTpe.typeSymbol.flags.is(Flags.Case) then
     report.errorAndAbort(
-      s"$methodName[${rootTpe.typeSymbol.name}] requires a case class"
+      s"moka: $methodName[${rootTpe.typeSymbol.name}] requires a case class."
     )
 
   val bsonAnnotations = Set("BsonProperty", "bsonField")
@@ -56,6 +56,11 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   // the root's own fields renamed for this mode's format, and for the other one
   val ownRenamed   = scala.collection.mutable.ListBuffer.empty[String]
   val otherRenamed = scala.collection.mutable.ListBuffer.empty[String]
+
+  /** Where to report about `field`: the field itself, as Scala 2 does. */
+  def fieldPos(field: Symbol): Position =
+    field.pos.getOrElse(Position.ofMacroExpansion)
+  var otherPos = Position.ofMacroExpansion
 
   def bsonName(owner: Symbol, field: Symbol): String =
     val ctorParam =
@@ -88,7 +93,9 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
         extracted.filter((ann, _) => jsonAnnotations.contains(ann))
     if owner == rootTpe.typeSymbol then
       if filtered.nonEmpty then ownRenamed += field.name
-      else if extracted.nonEmpty then otherRenamed += field.name
+      else if extracted.nonEmpty then
+        if otherRenamed.isEmpty then otherPos = fieldPos(field)
+        otherRenamed += field.name
 
     val distinctValues = filtered.map(_._2).distinct
     if distinctValues.isEmpty then field.name
@@ -100,7 +107,8 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
         case RenamingMode.BsonOnly => "BSON"
         case RenamingMode.JsonOnly => "JSON"
       report.errorAndAbort(
-        s"moka: conflicting $target renaming annotations on field '${field.name}': $formatted."
+        s"moka: conflicting $target renaming annotations on field '${field.name}': $formatted.",
+        fieldPos(field)
       )
 
   /** Case classes are descended into; value classes are not (a value class is
@@ -207,7 +215,8 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     report.warning(
       s"moka: ${rootTpe.typeSymbol.name}'s fields are renamed only by $otherLabel annotations " +
         s"(${otherRenamed.mkString(", ")}), which $methodName ignores for $label names: its names are the " +
-        s"Scala field names. If the documents use the $otherLabel names, use $otherCall."
+        s"Scala field names. If the documents use the $otherLabel names, use $otherCall.",
+      otherPos
     )
   refined.asType match
     case '[t] =>
