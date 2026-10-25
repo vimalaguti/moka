@@ -39,3 +39,6 @@ final case class DirectWithComposed(@BsonProperty("o") obj: ObjectInner)
 
 /** No moka object; its rename is meta-annotated onto the field. */
 final case class MetaInner(@(BsonProperty @field)("m") a: Int)
+
+/** Polymorphic recursion: each level is a larger type. */
+final case class Grow[A](next: Option[Grow[List[A]]], a: Option[A])

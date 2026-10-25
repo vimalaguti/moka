@@ -45,14 +45,32 @@ class Scala2ReviewSpec extends munit.FunSuite {
     )
   }
 
-  // Deferred: corner case, the path is correct today, and a fix risks re-entrant expansion through aliases.
-  test(
-    "2.5: a same-named class from another package is descended into".ignore
-  ) {
+  test("2.5: a same-named class from another package is descended into") {
     assertEquals(
       compileErrors("""val x: "old.n" = User.Fields.old.name"""),
       ""
     )
+  }
+
+  test(
+    "2.5: a self-reference qualified by its own package or object is a leaf"
+  ) {
+    val diags = CompileHarness.compile("Qualified.scala" -> """
+      package qself {
+        import io.moka._
+        @moka final case class Event(a: Option[qself.Event], b: Option[_root_.qself.Event])
+        object Outer {
+          @moka final case class Event(a: Option[Outer.Event], b: Option[qself.Outer.Event])
+        }
+        object Use {
+          val a: "a" = Event.Fields.a
+          val b: "b" = Event.Fields.b
+          val c: "a" = Outer.Event.Fields.a
+          val d: "b" = Outer.Event.Fields.b
+        }
+      }
+    """)
+    assertEquals(diags, Nil)
   }
 
   test("sibling shadowing a package-level type is an error, not its names") {

@@ -34,6 +34,23 @@ class Scala3MokaSpec extends munit.FunSuite {
     assertEquals(S3Holder.Fields.items._matched.qty, "items.$.q")
   }
 
+  test("a type alias as the root is dealiased") {
+    val a: "r" = S3AliasUse.Fields.a
+    assertEquals(a, "r")
+  }
+
+  test("a generic type nested in a smaller instance of itself descends") {
+    val x: "b.value.value.xx" = S3BoxBox.Fields.b.value.value.x
+    assertEquals(x, "b.value.value.xx")
+    assertEquals(S3BoxBox.Fields.b.value._path, "b.value")
+  }
+
+  test("a type growing at each level (polymorphic recursion) stops") {
+    val next: "g.next" = S3GrowRoot.Fields.g.next
+    assertEquals(next, "g.next")
+    assertEquals(S3GrowRoot.Fields.g.a.x, "g.a.xx")
+  }
+
   test("generateFields on a non-case class is a compile error") {
     val errors = compileErrors("generateFields[String]")
     assert(errors.contains("requires a case class"), errors)

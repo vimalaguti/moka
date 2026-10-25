@@ -39,7 +39,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
 ): Expr[FieldNames] =
   import quotes.reflect.*
 
-  val rootTpe = TypeRepr.of[T]
+  val rootTpe = TypeRepr.of[T].dealias
   if !rootTpe.typeSymbol.flags.is(Flags.Case) then
     report.errorAndAbort(
       s"moka: $methodName[${rootTpe.typeSymbol.name}] requires a case class."
@@ -121,19 +121,34 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
 
   val pathNode  = Symbol.classSymbol("io.moka.PathNode")
   val optionSym = TypeRepr.of[Option[Any]].typeSymbol
+  val mapSym    = Symbol.requiredClass("scala.collection.Map")
 
   /** `Option` and single-element collections are transparent: MongoDB's dot
     * notation is the same whether a sub-document is optional, in an array, or
-    * neither. `Map` has two type arguments and is left alone.
+    * neither. A `Map` is never one, even with one type argument (`IntMap[V]`).
     */
   def unwrap(t: TypeRepr, sawCollection: Boolean = false): (TypeRepr, Boolean) =
     val d = t.dealias
     d match
       case AppliedType(_, List(arg)) if d.typeSymbol == optionSym =>
         unwrap(arg, sawCollection)
-      case AppliedType(_, List(arg)) if d <:< TypeRepr.of[Iterable[Any]] =>
+      case AppliedType(_, List(arg))
+          if d <:< TypeRepr
+            .of[Iterable[Any]] && !d.baseClasses.contains(mapSym) =>
         unwrap(arg, true)
       case _ => (d, sawCollection)
+
+  def size(t: TypeRepr): Int = t.dealias match
+    case AppliedType(_, args) => 1 + args.map(size).sum
+    case _                    => 1
+
+  /** Whether descending into `t` would repeat a type on `path` (nearest first).
+    * A generic type may nest a strictly smaller instance of itself
+    * (`Box[Box[X]]`); a growing one (`F[A](x: F[List[A]])`) stops, so every
+    * descent terminates.
+    */
+  def onPath(t: TypeRepr, path: List[TypeRepr]): Boolean =
+    path.find(_.typeSymbol == t.typeSymbol).exists(p => size(t) >= size(p))
 
   /** Returns the refined type of the node addressing `prefix`, paired with the
     * expression building it. `prefix` is empty only for the root.
@@ -141,7 +156,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   def build(
       tpe: TypeRepr,
       prefix: String,
-      seen: Set[String],
+      seen: List[TypeRepr],
       isArray: Boolean
   ): (TypeRepr, Expr[Any]) =
     val owner = tpe.dealias.typeSymbol
@@ -150,10 +165,9 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
         if prefix.isEmpty then bsonName(owner, field)
         else prefix + "." + bsonName(owner, field)
       val (fieldTpe, fieldIsArray) = unwrap(tpe.dealias.memberType(field))
-      val key                      = fieldTpe.typeSymbol.fullName
-      if isDescendable(fieldTpe) && !seen.contains(key) then
+      if isDescendable(fieldTpe) && !onPath(fieldTpe, seen) then
         val (childTpe, childExpr) =
-          build(fieldTpe, path, seen + key, fieldIsArray)
+          build(fieldTpe, path, fieldTpe :: seen, fieldIsArray)
         (field.name, childTpe, childExpr)
       else
         (field.name, ConstantType(StringConstant(path)), Expr(path): Expr[Any])
@@ -206,7 +220,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     (refined, node)
 
   val (refined, node) =
-    build(rootTpe, "", Set(rootTpe.typeSymbol.fullName), isArray = false)
+    build(rootTpe, "", List(rootTpe), isArray = false)
 
   if ownRenamed.isEmpty && otherRenamed.nonEmpty then
     val (label, otherLabel, otherCall) = mode match

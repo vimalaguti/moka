@@ -101,3 +101,16 @@ final case class Grid(rows: List[Row])
 object Grid {
   val Fields = generateFields[Grid]
 }
+
+/** Maps with one type argument are still maps, not collections: descent stops
+  * at them as at `Map`.
+  */
+@moka
+final case class IntKeyed(
+    ints: scala.collection.immutable.IntMap[Level3],
+    longs: scala.collection.immutable.LongMap[Level3],
+    mutableLongs: scala.collection.mutable.LongMap[Level3]
+)
+object IntKeyed {
+  val Fields = generateFields[IntKeyed]
+}
