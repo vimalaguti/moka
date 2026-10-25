@@ -72,12 +72,16 @@ class Scala3ConflictSpec extends munit.FunSuite {
   ) {
     val bsonErr = compileErrors("generateBsonFields[String]")
     assert(
-      bsonErr.contains("generateBsonFields[String] requires a case class"),
+      bsonErr.contains(
+        "moka: generateBsonFields[String] requires a case class."
+      ),
       bsonErr
     )
     val jsonErr = compileErrors("generateJsonFields[String]")
     assert(
-      jsonErr.contains("generateJsonFields[String] requires a case class"),
+      jsonErr.contains(
+        "moka: generateJsonFields[String] requires a case class."
+      ),
       jsonErr
     )
   }
