@@ -39,10 +39,9 @@ jobs:
     - name: Test and release
       run: sbt "+testFull; ci-release"
       env:
-        # To gate a release for manual inspection instead of publishing it
-        # outright, add: CI_SONATYPE_RELEASE: sonaUpload
-        # ci-release then stages the bundle and stops, and you hit Publish on
-        # the Central Portal yourself. See RELEASING.md.
+        # Stage the bundle and stop: nothing is public until you hit Publish on
+        # the Central Portal yourself. Remove to publish outright. See RELEASING.md.
+        CI_SONATYPE_RELEASE: sonaUpload
         PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
         PGP_SECRET: ${{ secrets.PGP_SECRET }}
         SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}

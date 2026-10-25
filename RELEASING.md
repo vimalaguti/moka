@@ -75,21 +75,15 @@ git push origin v0.1.0
 ```
 
 The workflow runs `+testFull` and, only if it passes, `ci-release` — which signs with the
-imported key, stages a bundle, uploads it to the Central Portal and promotes it. Artifacts
-appear on <https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes to a few
-hours.
+imported key, stages a bundle and uploads it to the Central Portal. It does **not** publish:
+the workflow sets `CI_SONATYPE_RELEASE: sonaUpload`, so `ci-release` stops after upload.
 
-**Maven Central is immutable**: a published version can never be replaced or withdrawn. To
-inspect a bundle before it goes public, add to the workflow's `env`:
-
-```yaml
-CI_SONATYPE_RELEASE: sonaUpload
-```
-
-`ci-release` then stops after upload; open
+**Maven Central is immutable**: a published version can never be replaced or withdrawn. Open
 <https://central.sonatype.com/publishing/deployments>, confirm the deployment reads
-`VALIDATED`, and hit **Publish**. An unpublished deployment can be dropped freely, so this is
-the safe way to try a new key or a changed POM.
+`VALIDATED`, and hit **Publish**. Artifacts appear on
+<https://repo1.maven.org/maven2/io/github/vimalaguti/> within ten minutes to a few hours. An
+unpublished deployment can be dropped freely, so a bad bundle costs nothing. To publish
+outright instead, remove `CI_SONATYPE_RELEASE` from the workflow's `env`.
 
 Afterwards, regenerate the site from the tag so the install snippet shows the released
 version (`mdocVariables` interpolates `@VERSION@` from `version.value`):
