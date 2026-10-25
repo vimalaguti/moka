@@ -34,6 +34,9 @@ sidebar_position: 6
 - Scala 2.13: mutually recursive case classes give a clear error naming the
   cycle instead of crashing the compiler with `StackOverflowError`.
 - Scala 3: `generateFields` on a type alias of a case class.
+- Scala 3: a root with thousands of nested fields failed to compile with
+  `Method too large`; the tree is now emitted as string constants, which also
+  roughly halves moka's compile-time overhead on large models.
 - `IntMap` and `LongMap` fields were descended into as collections; like `Map`,
   they are now leaves.
 - A generic type nested in itself (`Box[Box[X]]`) stopped at the inner `Box`
