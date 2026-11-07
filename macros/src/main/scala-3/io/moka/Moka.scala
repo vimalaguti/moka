@@ -10,9 +10,6 @@ class moka(name: String = "Fields")         extends StaticAnnotation
 class mokaBson(name: String = "BsonFields") extends StaticAnnotation
 class mokaJson(name: String = "JsonFields") extends StaticAnnotation
 
-private[moka] enum RenamingMode:
-  case BsonOnly, JsonOnly
-
 transparent inline def generateFields[T]: FieldNames = ${
   generateFieldsImpl[T]
 }
@@ -26,15 +23,15 @@ transparent inline def generateJsonFields[T]: FieldNames = ${
 }
 
 private def generateFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.BsonOnly, "generateFields")
+  generateImpl[T](MokaFormat.Bson, "generateFields")
 
 private def generateBsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.BsonOnly, "generateBsonFields")
+  generateImpl[T](MokaFormat.Bson, "generateBsonFields")
 
 private def generateJsonFieldsImpl[T: Type](using Quotes): Expr[FieldNames] =
-  generateImpl[T](RenamingMode.JsonOnly, "generateJsonFields")
+  generateImpl[T](MokaFormat.Json, "generateJsonFields")
 
-private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
+private def generateImpl[T: Type](format: MokaFormat, methodName: String)(using
     Quotes
 ): Expr[FieldNames] =
   import quotes.reflect.*
@@ -45,15 +42,12 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
       s"moka: $methodName[${rootTpe.typeSymbol.name}] requires a case class."
     )
 
-  val bsonAnnotations = Set("BsonProperty", "bsonField")
-  val jsonAnnotations = Set("jsonField")
-
   /** Whether any field built into the object carries a renaming annotation of
     * any format (spec rule 1); decides the neutral marker.
     */
   var renamed = false
 
-  // the root's own fields renamed for this mode's format, and for the other one
+  // the root's own fields renamed for this format, and for the other one
   val ownRenamed   = scala.collection.mutable.ListBuffer.empty[String]
   val otherRenamed = scala.collection.mutable.ListBuffer.empty[String]
 
@@ -77,43 +71,26 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
           .orElse(extractStringArg(fun))
       case _ => None
 
-    // An empty value counts as no annotation at all (spec rule 5).
-    val extracted = allAnnotations.flatMap { ann =>
-      val name = ann.tpe.typeSymbol.name
-      if bsonAnnotations(name) || jsonAnnotations(name) then
-        extractStringArg(ann).filter(_.nonEmpty).map(v => (name, v))
-      else None
-    }.distinct
+    val extracted = MokaRules.renames(allAnnotations.flatMap { ann =>
+      extractStringArg(ann).map(v => (ann.tpe.typeSymbol.name, v))
+    })
     if extracted.nonEmpty then renamed = true
 
-    val filtered = mode match
-      case RenamingMode.BsonOnly =>
-        extracted.filter((ann, _) => bsonAnnotations.contains(ann))
-      case RenamingMode.JsonOnly =>
-        extracted.filter((ann, _) => jsonAnnotations.contains(ann))
     if owner == rootTpe.typeSymbol then
-      if filtered.nonEmpty then ownRenamed += field.name
+      if extracted.exists(r => format.renaming(r._1)) then
+        ownRenamed += field.name
       else if extracted.nonEmpty then
         if otherRenamed.isEmpty then otherPos = fieldPos(field)
         otherRenamed += field.name
 
-    val distinctValues = filtered.map(_._2).distinct
-    if distinctValues.isEmpty then field.name
-    else if distinctValues.length == 1 then distinctValues.head
-    else
-      val formatted =
-        filtered.map((ann, v) => s"@$ann(\"$v\")").mkString(", ")
-      val target = mode match
-        case RenamingMode.BsonOnly => "BSON"
-        case RenamingMode.JsonOnly => "JSON"
-      report.errorAndAbort(
-        s"moka: conflicting $target renaming annotations on field '${field.name}': $formatted.",
-        fieldPos(field)
-      )
+    MokaRules.resolveRename(field.name, extracted, format) match
+      case Right(name) => name
+      case Left(msg)   => report.errorAndAbort(msg, fieldPos(field))
 
   /** Case classes are descended into; value classes are not (a value class is
     * stored flattened, so its path is the outer field's path).
     */
+  // Same rule as `isDescendable` in Scala 2 `MokaExpander.scala`: keep them in step.
   def isDescendable(t: TypeRepr): Boolean =
     val s = t.dealias.typeSymbol
     s.isClassDef && s.flags.is(Flags.Case) && !(t.dealias <:< TypeRepr
@@ -127,6 +104,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     * notation is the same whether a sub-document is optional, in an array, or
     * neither. A `Map` is never one, even with one type argument (`IntMap[V]`).
     */
+  // Same rule as `unwrap` in Scala 2 `MokaExpander.scala`: keep them in step.
   def unwrap(t: TypeRepr, sawCollection: Boolean = false): (TypeRepr, Boolean) =
     val d = t.dealias
     d match
@@ -147,6 +125,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     * (`Box[Box[X]]`); a growing one (`F[A](x: F[List[A]])`) stops, so every
     * descent terminates.
     */
+  // Same rule as `onPath` in Scala 2 `MokaExpander.scala`: keep them in step.
   def onPath(t: TypeRepr, path: List[TypeRepr]): Boolean =
     path.find(_.typeSymbol == t.typeSymbol).exists(p => size(t) >= size(p))
 
@@ -182,7 +161,7 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
     // nest further.
     val arrayOps =
       if isArray then
-        List("_matched" -> "$", "_all" -> "$[]").map { (name, seg) =>
+        MokaRules.arrayOperators.map { (name, seg) =>
           val (opTpe, op) = build(tpe, prefix + "." + seg, seen, false)
           (name, opTpe, member(name, seg, "N" + op))
         }
@@ -195,11 +174,9 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
       if prefix.isEmpty then
         if !renamed then TypeRepr.of[FieldNames & MokaNames]
         else
-          mode match
-            case RenamingMode.BsonOnly =>
-              TypeRepr.of[FieldNames & MokaBsonNames]
-            case RenamingMode.JsonOnly =>
-              TypeRepr.of[FieldNames & MokaJsonNames]
+          format match
+            case MokaFormat.Bson => TypeRepr.of[FieldNames & MokaBsonNames]
+            case MokaFormat.Json => TypeRepr.of[FieldNames & MokaJsonNames]
       else pathNode.typeRef.appliedTo(ConstantType(StringConstant(prefix)))
     val refined = members.foldLeft(base) { case (acc, (name, tpe, _)) =>
       Refinement(acc, name, tpe)
@@ -215,18 +192,16 @@ private def generateImpl[T: Type](mode: RenamingMode, methodName: String)(using
   val root =
     if !renamed then '{ FieldNames.neutral($chunks*) }
     else
-      mode match
-        case RenamingMode.BsonOnly => '{ FieldNames.bson($chunks*) }
-        case RenamingMode.JsonOnly => '{ FieldNames.json($chunks*) }
+      format match
+        case MokaFormat.Bson => '{ FieldNames.bson($chunks*) }
+        case MokaFormat.Json => '{ FieldNames.json($chunks*) }
 
   if ownRenamed.isEmpty && otherRenamed.nonEmpty then
-    val (label, otherLabel, otherCall) = mode match
-      case RenamingMode.BsonOnly => ("BSON", "JSON", "generateJsonFields")
-      case RenamingMode.JsonOnly => ("JSON", "BSON", "generateBsonFields")
+    val other = format.other
     report.warning(
-      s"moka: ${rootTpe.typeSymbol.name}'s fields are renamed only by $otherLabel annotations " +
-        s"(${otherRenamed.mkString(", ")}), which $methodName ignores for $label names: its names are the " +
-        s"Scala field names. If the documents use the $otherLabel names, use $otherCall.",
+      s"moka: ${rootTpe.typeSymbol.name}'s fields are ${MokaRules.renamedOnlyBy(other)} " +
+        s"(${otherRenamed.mkString(", ")}), which $methodName ignores for ${format.label} names: its names are " +
+        s"the Scala field names. If the documents use the ${other.label} names, use ${other.explicitMethod}.",
       otherPos
     )
   refined.asType match

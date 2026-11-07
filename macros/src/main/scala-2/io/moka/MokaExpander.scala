@@ -83,39 +83,17 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   import c.universe._
   import MokaExpander._
 
-  private sealed trait Format {
-    def label: String
-    def annotation: String
-    def placeholder: String
-    def defaultObject: String
-    def renaming: Set[String]
-    def marker: ClassSymbol
-  }
-  private case object Bson extends Format {
-    val label         = "BSON"
-    val annotation    = "@moka"
-    val placeholder   = "generateFields"
-    val defaultObject = "Fields"
-    val renaming      = Set("BsonProperty", "bsonField")
-    lazy val marker   = c.mirror.staticClass("io.moka.MokaBsonNames")
-  }
-  private case object Json extends Format {
-    val label         = "JSON"
-    val annotation    = "@mokaJson"
-    val placeholder   = "generateJsonFields"
-    val defaultObject = "JsonFields"
-    val renaming      = Set("jsonField")
-    lazy val marker   = c.mirror.staticClass("io.moka.MokaJsonNames")
+  private type Format = MokaFormat
+  import MokaFormat.{Bson, Json}
+
+  private lazy val bsonMarker = c.mirror.staticClass("io.moka.MokaBsonNames")
+  private lazy val jsonMarker = c.mirror.staticClass("io.moka.MokaJsonNames")
+  private def marker(format: Format): ClassSymbol = format match {
+    case Bson => bsonMarker
+    case Json => jsonMarker
   }
 
   private lazy val neutralMarker = c.mirror.staticClass("io.moka.MokaNames")
-
-  private val allRenaming = Bson.renaming ++ Json.renaming
-  private val mokaAnnotations: Map[String, (Format, String)] = Map(
-    "moka"     -> ((Bson, "Fields")),
-    "mokaBson" -> ((Bson, "BsonFields")),
-    "mokaJson" -> ((Json, "JsonFields"))
-  )
 
   private val optOut: Boolean = c.settings.exists { s =>
     s == "moka.descendUnannotated" || s == "moka.descendUnannotated=true"
@@ -165,29 +143,26 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     * annotation at all (spec rule 5).
     */
   private def renamesFromMods(mods: Modifiers): List[(String, String)] =
-    mods.annotations
-      .flatMap {
-        case Apply(Select(New(tpt), _), args) =>
-          // the value is read from the arguments only, never from a
-          // meta-annotation inside `tpt`
-          leafTypeName(tpt)
-            .filter(allRenaming)
-            .flatMap(n =>
-              args.view.flatMap(findStringConstant).headOption.map(v => (n, v))
-            )
-        case _ => None
-      }
-      .filter(_._2.nonEmpty)
+    MokaRules.renames(mods.annotations.flatMap {
+      case Apply(Select(New(tpt), _), args) =>
+        // the value is read from the arguments only, never from a
+        // meta-annotation inside `tpt`
+        leafTypeName(tpt)
+          .filter(MokaFormat.allRenaming)
+          .flatMap(n =>
+            args.view.flatMap(findStringConstant).headOption.map(v => (n, v))
+          )
+      case _ => None
+    })
 
   private def renamesFromSymbol(sym: Symbol): List[(String, String)] = {
     sym.info // force completion before reading annotations
-    sym.annotations
-      .flatMap { ann =>
-        val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
-        if (allRenaming(name)) findStringConstant(ann.tree).map(v => (name, v))
-        else None
-      }
-      .filter(_._2.nonEmpty)
+    MokaRules.renames(sym.annotations.flatMap { ann =>
+      val name = ann.tree.tpe.typeSymbol.name.decodedName.toString
+      if (MokaFormat.allRenaming(name))
+        findStringConstant(ann.tree).map(v => (name, v))
+      else None
+    })
   }
 
   private def resolveName(
@@ -195,20 +170,11 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       fallback: String,
       renames: List[(String, String)],
       format: Format
-  ): String = {
-    val matches  = renames.filter(r => format.renaming(r._1))
-    val distinct = matches.map(_._2).distinct
-    if (distinct.isEmpty) fallback
-    else if (distinct.length == 1) distinct.head
-    else {
-      val formatted =
-        matches.map { case (ann, v) => s"@$ann(\"$v\")" }.mkString(", ")
-      c.abort(
-        pos,
-        s"moka: conflicting ${format.label} renaming annotations on field '$fallback': $formatted."
-      )
+  ): String =
+    MokaRules.resolveRename(fallback, renames, format) match {
+      case Right(name) => name
+      case Left(msg)   => c.abort(pos, msg)
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Shape: the existing descent rules
@@ -225,6 +191,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     * Returns the element type and whether a collection was crossed on the way
     * to it, which is what decides whether the field gets the array operators.
     */
+  // Same rule as `unwrap` in Scala 3 `Moka.scala`: keep them in step.
   private def unwrap(
       t: Type,
       sawCollection: Boolean = false
@@ -245,6 +212,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     * classfile has no flags until its info is loaded, so `isCaseClass` would be
     * false for a type no other code has touched yet.
     */
+  // Same rule as `isDescendable` in Scala 3 `Moka.scala`: keep them in step.
   private def isDescendable(t: Type): Boolean = {
     val s = t.dealias.typeSymbol
     s.isClass && { s.info; s.asClass.isCaseClass } && !(t.dealias <:< anyValTpe)
@@ -259,6 +227,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     * (`Box[Box[X]]`); a growing one (`F[A](x: F[List[A]])`) stops, so every
     * descent terminates.
     */
+  // Same rule as `onPath` in Scala 3 `Moka.scala`: keep them in step.
   private def onPath(t: Type, path: List[Type]): Boolean =
     path
       .find(_.typeSymbol == t.typeSymbol)
@@ -395,7 +364,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       else {
         val candidates = companion.info.decls.toList.filter { d =>
           d.isModule &&
-          (isMarked(d, format.marker) || isMarked(d, neutralMarker))
+          (isMarked(d, marker(format)) || isMarked(d, neutralMarker))
         }
         val read = candidates.map(m => (m, readObject(m, root = true)))
         read.map(_._2).distinct match {
@@ -435,9 +404,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     cls.pos != NoPosition && {
       cls.info
       val annotated = cls.annotations.exists(a =>
-        mokaAnnotations.contains(
-          a.tree.tpe.typeSymbol.name.decodedName.toString
-        )
+        MokaFormat
+          .ofAnnotation(a.tree.tpe.typeSymbol.name.decodedName.toString)
+          .isDefined
       )
       val companion = cls.companion
       annotated || (companion.isModule && companion.info.decls.exists { d =>
@@ -498,13 +467,13 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
             s"it carries a moka annotation, but its own expansion failed: fix the error reported at ${m.name}"
           else if (m.generic)
             "it is generic, so it cannot carry one: only the opt-out reaches it"
-          else s"add ${format.annotation}"
+          else s"add @${format.annotation}"
         s"\n  - ${m.name} (at ${m.at}): $fix"
       }
       val tail =
         if (todo.isEmpty) ""
         else
-          s"\nIn cross-compiled sources, also add `val ${format.defaultObject} = ${format.placeholder}[T]` to each " +
+          s"\nIn cross-compiled sources, also add `val ${format.defaultObject} = ${format.method}[T]` to each " +
             "companion. Objects compiled by moka 0.1.x carry no marker: recompile them. Or compile with " +
             "-Xmacro-settings:moka.descendUnannotated to read their annotations anyway."
       c.abort(
@@ -604,11 +573,11 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       if (!isArray) Nil
       else if (root)
         // an outer collection over N: compose N again under the operators
-        List("_matched" -> ".$", "_all" -> ".$[]").map { case (op, suffix) =>
+        MokaRules.arrayOperators.map { case (op, seg) =>
           composed(
             TermName(op),
             tpe,
-            path + suffix,
+            path + "." + seg,
             names,
             ref,
             seen,
@@ -618,7 +587,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
           )
         }
       else
-        List("_matched", "_all").map { op =>
+        MokaRules.arrayOperators.map { case (op, _) =>
           names.members.get(op) match {
             case Some(node: NNode) =>
               composed(
@@ -691,11 +660,11 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     val arrayOps =
       if (!isArray) Nil
       else
-        List("_matched" -> ".$", "_all" -> ".$[]").map { case (op, suffix) =>
+        MokaRules.arrayOperators.map { case (op, seg) =>
           direct(
             TermName(op),
             tpe,
-            path + suffix,
+            path + "." + seg,
             seen,
             isArray = false,
             format,
@@ -810,7 +779,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
             c.abort(
               vd.pos,
               s"moka: cannot resolve type '$tpt' of field '$fieldName' while expanding " +
-                s"${format.annotation} on $selfName: $reason"
+                s"@${format.annotation} on $selfName: $reason"
             )
         }
         val (ft, isArray) = unwrap(tpe)
@@ -860,21 +829,21 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
     val acc   = new Acc
     val terms = fieldNames(className, fields, format, acc)
     reportMissing(format, acc)
-    val other = if (format == Bson) Json else Bson
+    val other = format.other
     // generating the other format's object too says the ignoring is deliberate
     if (
       acc.ownRenamed.isEmpty && acc.otherRenamed.nonEmpty && !formats(other)
     ) {
       val msg =
-        s"moka: $className's fields are renamed only by ${other.label} annotations " +
+        s"moka: $className's fields are ${MokaRules.renamedOnlyBy(other)} " +
           s"(${acc.otherRenamed.mkString(", ")}), which its ${format.label} object $name ignores: its names " +
           s"are the Scala field names. If the documents use the ${other.label} names, generate them with " +
-          s"${other.placeholder} or ${other.annotation}."
+          s"${other.method} or @${other.annotation}."
       if (!suppressed(classAnnotations ++ acc.otherAnnotations, msg))
         c.warning(acc.otherPos, msg)
     }
-    val marker = if (acc.renamed) format.marker else neutralMarker
-    q"object $name extends ${marker} { ..$terms }"
+    val objMarker = if (acc.renamed) marker(format) else neutralMarker
+    q"object $name extends $objMarker { ..$terms }"
   }
 
   // ---------------------------------------------------------------------------
@@ -883,7 +852,9 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
   private def annotationParts(tree: Tree): Option[(String, List[Tree])] =
     tree match {
       case Apply(Select(New(tpt), _), args) =>
-        leafTypeName(tpt).filter(mokaAnnotations.contains).map(n => (n, args))
+        leafTypeName(tpt)
+          .filter(MokaFormat.ofAnnotation(_).isDefined)
+          .map(n => (n, args))
       case _ => None
     }
 
@@ -908,14 +879,11 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
         )
     }
 
+  /** The format of a placeholder `generate*Fields[T]`, qualified or not. */
   private def placeholderFormat(rhs: Tree): Option[Format] = rhs match {
-    case q"$_.generateFields[$_]"     => Some(Bson)
-    case q"generateFields[$_]"        => Some(Bson)
-    case q"$_.generateBsonFields[$_]" => Some(Bson)
-    case q"generateBsonFields[$_]"    => Some(Bson)
-    case q"$_.generateJsonFields[$_]" => Some(Json)
-    case q"generateJsonFields[$_]"    => Some(Json)
-    case _                            => None
+    case TypeApply(Select(_, TermName(n)), List(_)) => MokaFormat.ofMethod(n)
+    case TypeApply(Ident(TermName(n)), List(_))     => MokaFormat.ofMethod(n)
+    case _                                          => None
   }
 
   /** The cycle through the class being expanded, if one is known. */
@@ -1007,7 +975,7 @@ private[moka] final class MokaExpander[C <: whitebox.Context](val c: C) {
       if (placeholders.nonEmpty) placeholders
       else
         stack.map { case (ann, args) =>
-          val (format, default) = mokaAnnotations(ann)
+          val (format, default) = MokaFormat.ofAnnotation(ann).get
           objectName(args, default) -> format
         }
 
