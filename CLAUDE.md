@@ -54,14 +54,15 @@ global to a compilation. `docs / mdocOut` is pinned in `build.sbt` so the websit
 
 ### Two unrelated implementations
 
-`macros/src/main/scala-2/` and `macros/src/main/scala-3/` share only the public surface:
+`macros/src/main/scala-2/` and `macros/src/main/scala-3/` share only the public surface and
+`macros/src/main/scala/io/moka/MokaFormat.scala` (the format table and plain string rules):
 
 - **Scala 2**: `@moka` is a whitebox macro annotation working on *untyped* trees before the
   typer (`MokaExpander.scala`; `Moka.scala` is the public surface).
 - **Scala 3**: `@moka` is inert; `transparent inline def generateFields[T]` returns a
   `FieldNames` (a `Selectable` over a `Map`) typed as a `Refinement` chain of `ConstantType`s.
 
-So **every behaviour change must be made twice**; the shared suite
+So **every other behaviour change must be made twice**; the shared suite
 `examples/src/test/scala/io/moka/MokaSpec.scala` keeps them honest.
 
 **Do not "restore" a `MacroAnnotation` on Scala 3** (`specs/specs/2026-07-20-scala3-fields-macro-design.md`):
